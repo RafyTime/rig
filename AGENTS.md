@@ -12,5 +12,5 @@ See `docs/agents/triage-labels.md`.
 
 ## Domain docs
 
-Single-context layout using root `CONTEXT.md` and `docs/adr/`.
+Single-context layout using root `GLOSSARY.md` and `docs/adr/`.
 See `docs/agents/domain.md`.
