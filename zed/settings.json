@@ -1,0 +1,39 @@
+{
+  "agent": {
+    "play_sound_when_agent_done": "when_hidden",
+    "commit_message_instructions": "Follow Gitmoji conventions."
+  },
+  "terminal": {
+    "shell": {
+      "with_arguments": {
+        "program": "C:/Program Files/Git/bin/bash.exe",
+        "args": ["--login", "-i"]
+      }
+    },
+    "working_directory": "current_project_directory",
+    "detect_venv": {
+      "on": {
+        "directories": [".venv", "venv"],
+        "activate_script": "default"
+      }
+    },
+    "toolbar": {
+      "breadcrumbs": false
+    }
+  },
+  "git_panel": {
+    "group_by": "staging",
+    "tree_view": true
+  },
+  "session": {
+    "trust_all_worktrees": true
+  },
+  "agent_servers": {
+    "codex-acp": {
+      "default_config_options": {
+        "reasoning_effort": "medium"
+      },
+      "type": "registry"
+    }
+  },
+}
