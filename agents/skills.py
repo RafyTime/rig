@@ -111,6 +111,11 @@ def download(names, source, staging):
         cwd=staging,
         check=True,
         timeout=300,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return staging / ".agents" / "skills"
 
@@ -164,6 +169,24 @@ def reconcile(args):
         raise ValueError(f"invalid ownership entries: {state_file}")
     legacy = read_json(args.home / ".agents" / ".skill-lock.json").get("skills", {})
     failures = []
+    results = []
+
+    def report_error(label, error):
+        if isinstance(error, subprocess.CalledProcessError):
+            reason = f"skills CLI exited with status {error.returncode}"
+        elif isinstance(error, subprocess.TimeoutExpired):
+            reason = f"skills CLI timed out after {error.timeout} seconds"
+        else:
+            reason = str(error)
+        results.append(f"❌ ERROR {label}: {reason}")
+        details = getattr(error, "stdout", None)
+        if isinstance(details, bytes):
+            details = details.decode("utf-8", errors="replace")
+        if isinstance(details, str) and details.strip():
+            # Strip terminal cursor/color sequences from captured CLI diagnostics.
+            details = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", details).strip()
+            results.append("\n".join("  " + line for line in details.splitlines()))
+
     if root.exists() and (linked(root) or any(root.glob(".rig-*"))):
         raise ValueError(
             f"linked skills root or interrupted operation in {root}; inspect before retrying"
@@ -191,32 +214,38 @@ def reconcile(args):
                     raise ValueError(
                         "unmanaged installation; adoption requires matching source and --adopt-existing"
                     )
-                print(f"ADOPT {name} (baseline is the current installed content)")
                 if not args.dry_run:
                     records[name] = {"source": source, "digest": current}
                     save_json(state_file, state)
+                results.append(f"{'WOULD ADOPT' if args.dry_run else 'ADOPTED'} {name}")
             refresh = current is None or local is not None or args.command == "update"
             if not refresh:
-                print(f"OK {name}")
+                results.append(f"OK {name}")
                 continue
             if local is not None:
                 wanted = digest(local)
                 if current == wanted:
-                    print(f"OK {name}")
+                    results.append(f"OK {name}")
                     continue
-            print(f"{'INSTALL' if current is None else 'UPDATE'} {name}")
             if args.dry_run:
+                results.append(
+                    f"WOULD {'INSTALL' if current is None else 'UPDATE'} {name}"
+                )
                 continue
             pending.setdefault(source, []).append((name, local, current))
         except (ValueError, OSError, subprocess.SubprocessError) as error:
             failures.append(name)
-            print(f"ERROR {name}: {error}", file=sys.stderr)
+            report_error(name, error)
 
     for source, items in pending.items():
         try:
             with tempfile.TemporaryDirectory(prefix="rig-fetch-") as staging:
                 downloaded = None
                 if items[0][1] is None:
+                    print(
+                        f"Checking {source.removeprefix('remote:')} ({len(items)} skills)…",
+                        flush=True,
+                    )
                     downloaded = download(
                         [name for name, _, _ in items],
                         source.removeprefix("remote:"),
@@ -238,17 +267,20 @@ def reconcile(args):
                                 "installation changed during download; preserved"
                             )
                         if wanted == current:
-                            print(f"UNCHANGED {name}")
+                            results.append(f"UNCHANGED {name}")
                             continue
                         root.mkdir(parents=True, exist_ok=True)
                         record = {"source": source, "digest": wanted}
                         publish(candidate, target, state, record, state_file)
+                        results.append(
+                            f"{'INSTALLED' if current is None else 'UPDATED'} {name}"
+                        )
                     except (ValueError, OSError) as error:
                         failures.append(name)
-                        print(f"ERROR {name}: {error}", file=sys.stderr)
+                        report_error(name, error)
         except (ValueError, OSError, subprocess.SubprocessError) as error:
             failures.extend(name for name, _, _ in items)
-            print(f"ERROR {source}: {error}", file=sys.stderr)
+            report_error(source, error)
 
     removals = []
     for name in sorted(set(records) - set(selected)):
@@ -263,9 +295,10 @@ def reconcile(args):
                 save_json(state_file, state)
         except (ValueError, OSError) as error:
             failures.append(name)
-            print(f"ERROR {name}: {error}", file=sys.stderr)
+            report_error(name, error)
     if removals:
-        print("REMOVE pending: " + ", ".join(removals))
+        if not args.dry_run and sys.stdin.isatty():
+            print("\nRemove managed skills: " + ", ".join(removals), flush=True)
         confirmed = (
             not args.dry_run
             and sys.stdin.isatty()
@@ -280,12 +313,14 @@ def reconcile(args):
                     shutil.rmtree(root / name)
                     del records[name]
                     save_json(state_file, state)
-                    print(f"REMOVED {name}")
+                    results.append(f"REMOVED {name}")
                 except (ValueError, OSError) as error:
                     failures.append(name)
-                    print(f"ERROR {name}: {error}", file=sys.stderr)
-        elif not args.dry_run:
-            failures.extend(removals)
+                    report_error(name, error)
+        else:
+            results.append("REMOVE pending: " + ", ".join(removals))
+            if not args.dry_run:
+                failures.extend(removals)
     if root.exists():
         unlisted = sorted(
             p.name
@@ -295,8 +330,14 @@ def reconcile(args):
             and p.name not in records
         )
         if unlisted:
-            print("UNLISTED (untouched): " + ", ".join(unlisted))
-    print(f"Skills: {len(selected)} selected; {len(set(failures))} incomplete.")
+            results.append("ℹ️ UNLISTED (untouched): " + ", ".join(unlisted))
+    print("\n📋 Skill results" + (" (dry run)" if args.dry_run else ""))
+    for result in results:
+        print(result)
+    status = "⚠️" if failures else "✅"
+    print(
+        f"{status} Skills: {len(selected)} selected; {len(set(failures))} incomplete."
+    )
     return int(bool(failures))
 
 

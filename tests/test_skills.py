@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -145,6 +146,40 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual((self.root / "one/SKILL.md").read_text(), "original")
         self.assertEqual((self.root / "two/SKILL.md").read_text(), "original")
         self.assertEqual((self.root / "three/SKILL.md").read_text(), "updated")
+
+    def test_results_and_failure_diagnostics_follow_all_downloads(self):
+        self.set_manifest({"owner/pack": ["one"], "other/pack": ["two"]})
+
+        def noisy_fetch(names, source, stage):
+            print(f"CLI {source}")
+            if source == "owner/pack":
+                raise subprocess.CalledProcessError(
+                    1, "skills", output="\x1b[31mUpstream unavailable\x1b[0m\n"
+                )
+            return self.fetch(names, source, stage)
+
+        result, output, _ = self.run_sync(noisy_fetch)
+        self.assertEqual(result, 1)
+        summary = output.index("📋 Skill results")
+        self.assertLess(output.index("CLI other/pack"), summary)
+        self.assertGreater(output.index("ERROR remote:owner/pack"), summary)
+        self.assertGreater(output.index("Upstream unavailable"), summary)
+        self.assertGreater(output.index("INSTALLED two"), summary)
+        self.assertNotIn("\x1b[", output)
+
+    def test_download_captures_successful_cli_output(self):
+        cli = self.base / "fake_cli.py"
+        cli.write_text(
+            "import sys\nprint('CLI stdout')\nprint('CLI stderr', file=sys.stderr)\n"
+        )
+        with (
+            patch("shutil.which", return_value=sys.executable),
+            patch.object(skills, "SKILLS_CLI", str(cli)),
+            redirect_stdout(io.StringIO()) as output,
+            redirect_stderr(output),
+        ):
+            skills.download(["one"], "owner/pack", self.base)
+        self.assertEqual(output.getvalue(), "")
 
     def test_partial_failure_keeps_previous_install_and_installs_other_items(self):
         self.run_sync()

@@ -95,6 +95,8 @@ calls during an update. Each requested skill is verified independently, and
 unchanged contents are reported as `UNCHANGED` without replacing installed
 files. Missing selections are reported individually; a failed CLI call preserves
 all installations from that source while other sources continue.
+Normal CLI output is hidden behind one progress line per source. Per-skill
+results appear together at the end, with captured CLI diagnostics for failures.
 
 - One manifest selects sources and names for downloaded and custom skills.
   Add shared skills there; direct CLI installs remain local until selected.
