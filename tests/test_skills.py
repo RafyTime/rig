@@ -1,0 +1,230 @@
+"""Ownership and failure tests use temporary homes; no network or live skills."""
+
+import importlib.util
+import io
+import subprocess
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+SPEC = importlib.util.spec_from_file_location(
+    "rig_skills", Path(__file__).parents[1] / "agents/skills.py"
+)
+skills = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(skills)
+
+
+class SkillsTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.base = Path(self.temporary.name)
+        self.home = self.base / "home"
+        self.repo = self.base / "repo"
+        self.repo.mkdir()
+        self.manifest = self.repo / "skills.json"
+        self.root = self.home / ".agents/skills"
+        self.state_file = self.home / ".local/state/rig/skills.json"
+        self.args = SimpleNamespace(
+            command="sync",
+            home=self.home,
+            manifest=self.manifest,
+            dry_run=False,
+            adopt_existing=False,
+        )
+        self.set_manifest({"owner/pack": ["one"]})
+
+    def set_manifest(self, sources=None, custom=None):
+        skills.save_json(
+            self.manifest,
+            {"version": 1, "sources": sources or {}, "custom": custom or {}},
+        )
+
+    def write_skill(self, path, content="original"):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "SKILL.md").write_text(content)
+        return path
+
+    def fetch(self, name, source, stage):
+        return self.write_skill(stage / ".agents/skills" / name)
+
+    def run_sync(self, fetch=None, **changes):
+        for key, value in changes.items():
+            setattr(self.args, key, value)
+        output = io.StringIO()
+        with (
+            patch.object(skills, "REPO", self.repo),
+            patch.object(
+                skills, "download", side_effect=fetch or self.fetch
+            ) as download,
+            redirect_stdout(output),
+            redirect_stderr(output),
+        ):
+            result = skills.reconcile(self.args)
+        return result, output.getvalue(), download
+
+    def test_missing_installs_existing_sync_is_offline_and_deleted_skill_restores(self):
+        self.assertEqual(self.run_sync()[0], 0)
+        result, _, download = self.run_sync()
+        self.assertEqual(result, 0)
+        download.assert_not_called()
+        import shutil
+
+        shutil.rmtree(self.root / "one")
+        result, _, download = self.run_sync()
+        self.assertEqual(result, 0)
+        download.assert_called_once()
+
+    def test_update_refreshes_selected_only_and_preserves_unlisted(self):
+        self.run_sync()
+        self.write_skill(self.root / "unlisted")
+
+        def newer(name, source, stage):
+            return self.write_skill(stage / name, "newer")
+
+        result, output, download = self.run_sync(newer, command="update")
+        self.assertEqual(result, 0)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "newer")
+        download.assert_called_once()
+        self.assertIn("UNLISTED (untouched): unlisted", output)
+
+    def test_partial_failure_keeps_previous_install_and_installs_other_items(self):
+        self.run_sync()
+        self.set_manifest({"owner/pack": ["one", "two"]})
+
+        def unavailable(name, source, stage):
+            if name == "one":
+                raise subprocess.CalledProcessError(1, "skills")
+            return self.fetch(name, source, stage)
+
+        result, _, _ = self.run_sync(unavailable, command="update")
+        self.assertEqual(result, 1)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "original")
+        self.assertTrue((self.root / "two/SKILL.md").is_file())
+
+    def test_local_edits_and_source_changes_are_preserved(self):
+        self.run_sync()
+        (self.root / "one/SKILL.md").write_text("my edits")
+        self.assertEqual(self.run_sync(command="update")[0], 1)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "my edits")
+        self.set_manifest({"someone/else": ["one"]})
+        self.assertIn("source changed", self.run_sync()[1])
+
+    def test_custom_source_changes_refresh_but_local_edits_conflict(self):
+        custom = self.write_skill(self.repo / "custom/mine")
+        self.set_manifest(custom={"mine": "custom/mine"})
+        self.assertEqual(self.run_sync()[0], 0)
+        (custom / "SKILL.md").write_text("edited in rig")
+        self.assertEqual(self.run_sync()[0], 0)
+        self.assertEqual((self.root / "mine/SKILL.md").read_text(), "edited in rig")
+        (self.root / "mine/SKILL.md").write_text("local edit")
+        self.assertEqual(self.run_sync()[0], 1)
+
+    def test_removal_requires_confirmation_and_preserves_modified_copies(self):
+        self.run_sync()
+        self.set_manifest()
+        with patch("sys.stdin.isatty", return_value=False):
+            self.assertEqual(self.run_sync()[0], 1)
+        self.assertTrue((self.root / "one").exists())
+        with (
+            patch("sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="y"),
+        ):
+            self.assertEqual(self.run_sync()[0], 0)
+        self.assertFalse((self.root / "one").exists())
+
+    def test_removing_modified_copy_does_not_prompt(self):
+        self.run_sync()
+        (self.root / "one/SKILL.md").write_text("modified")
+        self.set_manifest()
+        with patch("builtins.input") as prompt:
+            self.assertEqual(self.run_sync()[0], 1)
+            prompt.assert_not_called()
+
+    def test_adoption_requires_explicit_trust_and_matching_source(self):
+        self.write_skill(self.root / "one")
+        skills.save_json(
+            self.home / ".agents/.skill-lock.json",
+            {"skills": {"one": {"source": "owner/pack"}}},
+        )
+        self.assertEqual(self.run_sync()[0], 1)
+        self.assertEqual(self.run_sync(adopt_existing=True)[0], 0)
+        self.assertIn("one", skills.read_json(self.state_file)["skills"])
+
+    def test_unmanaged_collision_without_metadata_is_preserved(self):
+        self.write_skill(self.root / "one", "unknown origin")
+        self.assertEqual(self.run_sync(adopt_existing=True)[0], 1)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "unknown origin")
+
+    def test_dry_run_does_not_download_create_state_or_remove(self):
+        result, _, download = self.run_sync(dry_run=True)
+        self.assertEqual(result, 0)
+        download.assert_not_called()
+        self.assertFalse(self.home.exists())
+
+    def test_duplicate_names_and_escaping_custom_paths_rejected(self):
+        with self.assertRaises(ValueError):
+            skills.selections(
+                {"version": 1, "sources": {"a/b": ["one"], "c/d": ["ONE"]}}, self.repo
+            )
+        with self.assertRaises(ValueError):
+            skills.selections({"version": 1, "custom": {"one": "../escape"}}, self.repo)
+
+    def test_publish_rolls_back_when_state_write_fails(self):
+        self.run_sync()
+        before = skills.read_json(self.state_file)
+        candidate = self.write_skill(self.base / "incoming", "replacement")
+        with (
+            patch.object(skills, "save_json", side_effect=OSError("disk full")),
+            self.assertRaises(OSError),
+        ):
+            skills.publish(
+                candidate,
+                self.root / "one",
+                before,
+                {"source": "remote:owner/pack", "digest": skills.digest(candidate)},
+                self.state_file,
+            )
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "original")
+        self.assertEqual(before, skills.read_json(self.state_file))
+
+    def test_cli_zero_exit_without_requested_skill_is_rejected(self):
+        with (
+            patch("shutil.which", return_value="bunx"),
+            patch("subprocess.run"),
+            self.assertRaises(ValueError),
+        ):
+            skills.download("absent", "owner/pack", self.base)
+
+    def test_edit_during_download_is_preserved(self):
+        self.run_sync()
+
+        def concurrent_edit(name, source, stage):
+            (self.root / name / "SKILL.md").write_text("edited during fetch")
+            return self.write_skill(stage / name, "downloaded")
+
+        result, output, _ = self.run_sync(concurrent_edit, command="update")
+        self.assertEqual(result, 1)
+        self.assertIn("changed during download", output)
+        self.assertEqual(
+            (self.root / "one/SKILL.md").read_text(), "edited during fetch"
+        )
+
+    def test_concurrent_writer_lock_is_preserved(self):
+        lock = self.state_file.with_suffix(".lock")
+        lock.parent.mkdir(parents=True)
+        lock.write_text("another process")
+        with (
+            patch("sys.argv", ["skills.py", "sync", "--home", str(self.home)]),
+            redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(skills.main(), 1)
+        self.assertEqual(lock.read_text(), "another process")
+        self.assertFalse(self.root.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
