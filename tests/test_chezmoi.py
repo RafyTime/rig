@@ -20,7 +20,7 @@ class ChezmoiTest(unittest.TestCase):
             base = Path(temporary)
             repo, home = base / "repo with spaces", base / "home"
             home.mkdir()
-            (repo / "agents/custom/mine").mkdir(parents=True)
+            (repo / "agents/skills/mine").mkdir(parents=True)
             (repo / "home/.chezmoiscripts").mkdir(parents=True)
             (repo / ".chezmoiroot").write_text("home\n")
             shutil.copy2(REPO / "agents/skills.py", repo / "agents/skills.py")
@@ -28,11 +28,10 @@ class ChezmoiTest(unittest.TestCase):
                 shutil.copy2(hook, repo / "home/.chezmoiscripts" / hook.name)
             manifest = {
                 "version": 1,
-                "sources": {},
-                "custom": {"mine": "agents/custom/mine"},
+                "sources": [{"source": "./agents/skills", "skills": ["mine"]}],
             }
             (repo / "agents/skills.json").write_text(json.dumps(manifest))
-            source = repo / "agents/custom/mine/SKILL.md"
+            source = repo / "agents/skills/mine/SKILL.md"
             source.write_text("original")
             (repo / "home/ordinary.txt").write_text("configuration")
             config = base / "config.json"

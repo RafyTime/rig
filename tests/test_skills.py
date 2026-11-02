@@ -38,10 +38,16 @@ class SkillsTest(unittest.TestCase):
         )
         self.set_manifest({"owner/pack": ["one"]})
 
-    def set_manifest(self, sources=None, custom=None):
+    def set_manifest(self, sources=None):
         skills.save_json(
             self.manifest,
-            {"version": 1, "sources": sources or {}, "custom": custom or {}},
+            {
+                "version": 1,
+                "sources": [
+                    {"source": source, "skills": names}
+                    for source, names in (sources or {}).items()
+                ],
+            },
         )
 
     def write_skill(self, path, content="original"):
@@ -206,13 +212,47 @@ class SkillsTest(unittest.TestCase):
 
     def test_custom_source_changes_refresh_but_local_edits_conflict(self):
         custom = self.write_skill(self.repo / "custom/mine")
-        self.set_manifest(custom={"mine": "custom/mine"})
+        self.set_manifest({"./custom": ["mine"]})
         self.assertEqual(self.run_sync()[0], 0)
         (custom / "SKILL.md").write_text("edited in rig")
         self.assertEqual(self.run_sync()[0], 0)
         self.assertEqual((self.root / "mine/SKILL.md").read_text(), "edited in rig")
         (self.root / "mine/SKILL.md").write_text("local edit")
         self.assertEqual(self.run_sync()[0], 1)
+
+    def test_one_local_source_selects_multiple_skills(self):
+        self.write_skill(self.repo / "agents/skills/one")
+        self.write_skill(self.repo / "agents/skills/two")
+        self.set_manifest({"./agents/skills": ["one", "two"]})
+        result, _, download = self.run_sync()
+        self.assertEqual(result, 0)
+        download.assert_not_called()
+        records = skills.read_json(self.state_file)["skills"]
+        self.assertEqual(records["one"]["source"], "local:agents/skills/one")
+        self.assertEqual(records["two"]["source"], "local:agents/skills/two")
+        self.assertTrue((self.root / "one/SKILL.md").is_file())
+        self.assertTrue((self.root / "two/SKILL.md").is_file())
+
+    def test_owned_download_can_be_explicitly_forked_to_identical_custom_source(self):
+        self.run_sync()
+        custom = self.write_skill(self.repo / "custom/one")
+        self.set_manifest({"./custom": ["one"]})
+        self.assertEqual(self.run_sync()[0], 1)
+        before = self.state_file.read_bytes()
+        self.assertEqual(self.run_sync(adopt_existing=True, dry_run=True)[0], 0)
+        self.assertEqual(self.state_file.read_bytes(), before)
+        (custom / "SKILL.md").write_text("different source contents")
+        self.assertEqual(self.run_sync(dry_run=False)[0], 1)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "original")
+        (custom / "SKILL.md").write_text("original")
+        self.assertEqual(self.run_sync()[0], 0)
+        self.assertEqual(
+            skills.read_json(self.state_file)["skills"]["one"]["source"],
+            "local:custom/one",
+        )
+        (custom / "SKILL.md").write_text("my custom version")
+        self.assertEqual(self.run_sync(adopt_existing=False)[0], 0)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "my custom version")
 
     def test_removal_requires_confirmation_and_preserves_modified_copies(self):
         self.run_sync()
@@ -259,10 +299,23 @@ class SkillsTest(unittest.TestCase):
     def test_duplicate_names_and_escaping_custom_paths_rejected(self):
         with self.assertRaises(ValueError):
             skills.selections(
-                {"version": 1, "sources": {"a/b": ["one"], "c/d": ["ONE"]}}, self.repo
+                {
+                    "version": 1,
+                    "sources": [
+                        {"source": "a/b", "skills": ["one"]},
+                        {"source": "c/d", "skills": ["ONE"]},
+                    ],
+                },
+                self.repo,
             )
         with self.assertRaises(ValueError):
-            skills.selections({"version": 1, "custom": {"one": "../escape"}}, self.repo)
+            skills.selections(
+                {
+                    "version": 1,
+                    "sources": [{"source": "./../escape", "skills": ["one"]}],
+                },
+                self.repo,
+            )
 
     def test_publish_rolls_back_when_state_write_fails(self):
         self.run_sync()

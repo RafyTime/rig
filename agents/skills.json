@@ -1,44 +1,55 @@
 {
   "version": 1,
-  "sources": {
-    "mattpocock/skills": [
-      "ask-matt",
-      "code-review",
-      "codebase-design",
-      "diagnosing-bugs",
-      "domain-modeling",
-      "grill-me",
-      "grill-with-docs",
-      "grilling",
-      "handoff",
-      "implement",
-      "implement-spec",
-      "improve-codebase-architecture",
-      "pr",
-      "prototype",
-      "research",
-      "retro",
-      "setup-matt-pocock-skills",
-      "tdd",
-      "teach",
-      "to-questionnaire",
-      "to-spec",
-      "to-tickets",
-      "triage",
-      "wait-what",
-      "wayfinder",
-      "wizard",
-      "writing-for-agents"
-    ],
-    "vercel-labs/skills": [
-      "find-skills"
-    ],
-    "anthropics/skills": [
-      "frontend-design"
-    ],
-    "cursor/plugins": [
-      "unslop"
-    ]
-  },
-  "custom": {}
+  "sources": [
+    {
+      "source": "./agents/skills",
+      "skills": [
+        "unslop"
+      ]
+    },
+    {
+      "source": "mattpocock/skills",
+      "skills": [
+        "ask-matt",
+        "code-review",
+        "codebase-design",
+        "diagnosing-bugs",
+        "domain-modeling",
+        "grill-me",
+        "grill-with-docs",
+        "grilling",
+        "handoff",
+        "implement",
+        "implement-spec",
+        "improve-codebase-architecture",
+        "pr",
+        "prototype",
+        "research",
+        "retro",
+        "setup-matt-pocock-skills",
+        "tdd",
+        "teach",
+        "to-questionnaire",
+        "to-spec",
+        "to-tickets",
+        "triage",
+        "wait-what",
+        "wayfinder",
+        "wizard",
+        "writing-for-agents"
+      ]
+    },
+    {
+      "source": "vercel-labs/skills",
+      "skills": [
+        "find-skills"
+      ]
+    },
+    {
+      "source": "anthropics/skills",
+      "skills": [
+        "frontend-design"
+      ]
+    }
+  ]
 }

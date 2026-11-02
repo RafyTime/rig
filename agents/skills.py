@@ -60,10 +60,8 @@ def digest(path):
 def selections(manifest, repo):
     if not isinstance(manifest, dict) or manifest.get("version") != 1:
         raise ValueError("expected manifest version 1")
-    if not isinstance(manifest.get("sources", {}), dict) or not isinstance(
-        manifest.get("custom", {}), dict
-    ):
-        raise TypeError("sources and custom must be objects")
+    if not isinstance(manifest.get("sources"), list) or "custom" in manifest:
+        raise TypeError("use one sources list with source and skills entries")
     result = {}
     folded = set()
 
@@ -75,18 +73,33 @@ def selections(manifest, repo):
         folded.add(name.casefold())
         result[name] = {"source": source, "local": local}
 
-    for source, names in manifest.get("sources", {}).items():
-        if not source or source.startswith("-") or not isinstance(names, list):
+    for entry in manifest["sources"]:
+        if not isinstance(entry, dict):
+            raise TypeError("each source entry must be an object")
+        source, names = entry.get("source"), entry.get("skills")
+        if (
+            not isinstance(source, str)
+            or not source
+            or source.startswith("-")
+            or not isinstance(names, list)
+        ):
             raise ValueError(f"invalid source selection: {source!r}")
+        container = None
+        if source.startswith("./"):
+            container = (repo / source).resolve()
+            if not container.is_relative_to(repo.resolve()):
+                raise ValueError(f"local source must be inside rig: {source}")
         for name in names:
-            add(name, "remote:" + source)
-    for name, relative in manifest.get("custom", {}).items():
-        if not isinstance(relative, str) or not relative:
-            raise ValueError(f"invalid custom source for {name}")
-        local = (repo / relative).resolve()
-        if not local.is_relative_to(repo.resolve()) or local == repo.resolve():
-            raise ValueError(f"custom source must be inside rig: {relative}")
-        add(name, "local:" + relative, local)
+            if container is None:
+                add(name, "remote:" + source)
+            else:
+                if not valid_name(name):
+                    raise ValueError(f"invalid skill directory name: {name!r}")
+                local = (container / name).resolve()
+                if not local.is_relative_to(container):
+                    raise ValueError(f"skill must be inside its local source: {name}")
+                relative = local.relative_to(repo.resolve()).as_posix()
+                add(name, "local:" + relative, local)
     return result
 
 
@@ -200,7 +213,17 @@ def reconcile(args):
         try:
             current = digest(target) if target.exists() or target.is_symlink() else None
             if previous and previous["source"] != source:
-                raise ValueError("source changed; resolve ownership before replacing")
+                if not (
+                    args.adopt_existing
+                    and local is not None
+                    and current == previous["digest"]
+                    and current == digest(local)
+                ):
+                    raise ValueError(
+                        "source changed; resolve ownership before replacing"
+                    )
+                # An explicit, identical local fork can take over an owned copy.
+                previous = None
             if previous and current and previous["digest"] != current:
                 raise ValueError(
                     "local edits detected; preserve or move to a custom skill"
@@ -357,7 +380,7 @@ def main():
     parser.add_argument(
         "--adopt-existing",
         action="store_true",
-        help="trust current contents when existing CLI source metadata matches",
+        help="adopt matching CLI installs or transfer ownership to an identical custom source",
     )
     args = parser.parse_args()
     # Refuse simultaneous writers, including sync versus explicit update.

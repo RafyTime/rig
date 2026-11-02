@@ -61,12 +61,16 @@ leaves installed downloaded versions unchanged.
 ```json
 {
   "version": 1,
-  "sources": {"mattpocock/skills": ["code-review", "tdd"]},
-  "custom": {"my-skill": "agents/custom/my-skill"}
+  "sources": [
+    {"source": "mattpocock/skills", "skills": ["code-review", "tdd"]},
+    {"source": "./agents/skills", "skills": ["unslop"]}
+  ]
 }
 ```
 
-Custom paths are relative to rig and point to directories containing `SKILL.md`.
+Sources beginning with `./` are local skill containers relative to rig. Each
+selected name maps to `<source>/<name>/SKILL.md`. Other sources are downloaded
+through the CLI. Local sources refresh on apply; remote updates remain explicit.
 From the repo root:
 
 ```sh
@@ -90,8 +94,8 @@ updater, which does not share the wrapper's ownership state. Downloads use the
 CLI's project scope in a temporary directory before publishing global files;
 the CLI's global lock file is no longer the shared inventory.
 
-Downloads are batched by source: the current 30 selections require four CLI
-calls during an update. Each requested skill is verified independently, and
+Downloads are batched by source, with one CLI call per downloaded source during
+an update. Each requested skill is verified independently, and
 unchanged contents are reported as `UNCHANGED` without replacing installed
 files. Missing selections are reported individually; a failed CLI call preserves
 all installations from that source while other sources continue.
@@ -110,6 +114,48 @@ results appear together at the end, with captured CLI diagnostics for failures.
   revision pinning are deferred. New upstream skills require explicit selection.
 - Initially manage only `~/.agents/skills/`. Keep destination handling separate
   so Claude's `~/.claude/skills/` can be added later.
+
+### Custom skills and forks
+
+Custom skills live under `agents/skills/<name>/SKILL.md`. `skills.sh.json`
+declares this discovery path for the Vercel skills CLI; the skills do not depend
+on chezmoi or the rig wrapper to be installed.
+
+Once the skill files and discovery config are committed and pushed, install from
+this repo independently:
+
+```sh
+bunx skills@latest add RafyTime/rig --list
+bunx skills@latest add RafyTime/rig --skill unslop -g -a codex
+```
+
+The Codex target uses the shared global `.agents/skills` location, also read by
+Cursor. To test unpublished changes, replace `RafyTime/rig` with the local repo
+path. Run installs from a different directory if testing project-scoped installs
+so the source repo stays clean.
+
+`agents/skills/unslop/SKILL.md` is the first custom skill, forked from the
+installed `cursor/plugins` version. Edit this source in rig, then run
+`chezmoi diff` and `chezmoi apply`. The diff shows the sync script, not a diff
+of custom skill contents; use Git to review source edits. Upstream skill updates
+no longer replace this custom selection.
+
+To fork another managed skill:
+
+1. Copy its installed folder into `agents/skills/<name>/` before modifying it.
+2. Move its name from the downloaded source to the `./agents/skills` source's
+   `skills` list in `agents/skills.json`. Keep the skill's frontmatter name.
+3. Run `uv run --script agents/skills.py sync --adopt-existing --dry-run`, then
+   run it without `--dry-run`. This explicitly transfers ownership only when the
+   custom source, installed copy, and previous baseline match.
+4. Make your edits in rig and apply normally. On a fresh device, apply installs
+   the custom source directly. Existing devices need the explicit adoption step
+   before edits diverge; otherwise preserve the source conflict and resolve it
+   deliberately, or use a distinct name for the custom skill.
+
+The custom unslop skill allows automatic invocation. Its description instructs
+agents to apply it whenever composing or editing text, including chat replies,
+documentation, and code comments.
 
 ### Preservation and reporting
 
