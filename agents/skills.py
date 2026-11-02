@@ -90,7 +90,7 @@ def selections(manifest, repo):
     return result
 
 
-def download(name, source, staging):
+def download(names, source, staging):
     """Project scope confines CLI file writes to staging, not the global setup."""
     executable = shutil.which("bunx")
     if not executable:
@@ -102,7 +102,7 @@ def download(name, source, staging):
             "add",
             source,
             "--skill",
-            name,
+            *names,
             "--agent",
             "codex",
             "--yes",
@@ -112,9 +112,7 @@ def download(name, source, staging):
         check=True,
         timeout=300,
     )
-    candidate = staging / ".agents" / "skills" / name
-    digest(candidate)  # A zero exit status alone does not prove installation.
-    return candidate
+    return staging / ".agents" / "skills"
 
 
 def publish(candidate, target, state, record, state_file):
@@ -171,6 +169,7 @@ def reconcile(args):
             f"linked skills root or interrupted operation in {root}; inspect before retrying"
         )
 
+    pending = {}
     for name, selection in selected.items():
         target = root / name
         source, local = selection["source"], selection["local"]
@@ -208,16 +207,48 @@ def reconcile(args):
             print(f"{'INSTALL' if current is None else 'UPDATE'} {name}")
             if args.dry_run:
                 continue
-            root.mkdir(parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(prefix="rig-fetch-") as staging:
-                candidate = local or download(
-                    name, source.removeprefix("remote:"), Path(staging)
-                )
-                record = {"source": source, "digest": digest(candidate)}
-                publish(candidate, target, state, record, state_file)
+            pending.setdefault(source, []).append((name, local, current))
         except (ValueError, OSError, subprocess.SubprocessError) as error:
             failures.append(name)
             print(f"ERROR {name}: {error}", file=sys.stderr)
+
+    for source, items in pending.items():
+        try:
+            with tempfile.TemporaryDirectory(prefix="rig-fetch-") as staging:
+                downloaded = None
+                if items[0][1] is None:
+                    downloaded = download(
+                        [name for name, _, _ in items],
+                        source.removeprefix("remote:"),
+                        Path(staging),
+                    )
+                for name, local, current in items:
+                    try:
+                        target = root / name
+                        candidate = local if local is not None else downloaded / name
+                        # Verify each request: the CLI may silently skip missing names.
+                        wanted = digest(candidate)
+                        actual = (
+                            digest(target)
+                            if target.exists() or target.is_symlink()
+                            else None
+                        )
+                        if actual != current:
+                            raise ValueError(
+                                "installation changed during download; preserved"
+                            )
+                        if wanted == current:
+                            print(f"UNCHANGED {name}")
+                            continue
+                        root.mkdir(parents=True, exist_ok=True)
+                        record = {"source": source, "digest": wanted}
+                        publish(candidate, target, state, record, state_file)
+                    except (ValueError, OSError) as error:
+                        failures.append(name)
+                        print(f"ERROR {name}: {error}", file=sys.stderr)
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            failures.extend(name for name, _, _ in items)
+            print(f"ERROR {source}: {error}", file=sys.stderr)
 
     removals = []
     for name in sorted(set(records) - set(selected)):

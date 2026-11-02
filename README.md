@@ -90,6 +90,12 @@ updater, which does not share the wrapper's ownership state. Downloads use the
 CLI's project scope in a temporary directory before publishing global files;
 the CLI's global lock file is no longer the shared inventory.
 
+Downloads are batched by source: the current 30 selections require four CLI
+calls during an update. Each requested skill is verified independently, and
+unchanged contents are reported as `UNCHANGED` without replacing installed
+files. Missing selections are reported individually; a failed CLI call preserves
+all installations from that source while other sources continue.
+
 - One manifest selects sources and names for downloaded and custom skills.
   Add shared skills there; direct CLI installs remain local until selected.
 - Downloaded contents stay upstream, outside rig. Custom skill sources live in

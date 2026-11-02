@@ -48,8 +48,11 @@ class SkillsTest(unittest.TestCase):
         (path / "SKILL.md").write_text(content)
         return path
 
-    def fetch(self, name, source, stage):
-        return self.write_skill(stage / ".agents/skills" / name)
+    def fetch(self, names, source, stage):
+        root = stage / ".agents/skills"
+        for name in names:
+            self.write_skill(root / name)
+        return root
 
     def run_sync(self, fetch=None, **changes):
         for key, value in changes.items():
@@ -82,8 +85,10 @@ class SkillsTest(unittest.TestCase):
         self.run_sync()
         self.write_skill(self.root / "unlisted")
 
-        def newer(name, source, stage):
-            return self.write_skill(stage / name, "newer")
+        def newer(names, source, stage):
+            for name in names:
+                self.write_skill(stage / name, "newer")
+            return stage
 
         result, output, download = self.run_sync(newer, command="update")
         self.assertEqual(result, 0)
@@ -91,14 +96,65 @@ class SkillsTest(unittest.TestCase):
         download.assert_called_once()
         self.assertIn("UNLISTED (untouched): unlisted", output)
 
+    def test_downloads_once_per_source_with_only_requested_names(self):
+        self.set_manifest({"owner/pack": ["one", "two"], "other/pack": ["three"]})
+        result, _, download = self.run_sync()
+        self.assertEqual(result, 0)
+        self.assertEqual(download.call_count, 2)
+        self.assertEqual(
+            download.call_args_list[0].args[:2], (["one", "two"], "owner/pack")
+        )
+        self.assertEqual(download.call_args_list[1].args[:2], (["three"], "other/pack"))
+        # Sync fetches only a newly added selection, not its installed siblings.
+        self.set_manifest(
+            {"owner/pack": ["one", "two", "four"], "other/pack": ["three"]}
+        )
+        result, _, download = self.run_sync()
+        self.assertEqual(result, 0)
+        download.assert_called_once()
+        self.assertEqual(download.call_args.args[:2], (["four"], "owner/pack"))
+
+    def test_unchanged_download_does_not_replace_files_or_rewrite_state(self):
+        self.run_sync()
+        before = self.state_file.read_bytes()
+        with (
+            patch.object(skills, "publish") as publish,
+            patch.object(skills, "save_json") as save,
+        ):
+            result, output, _ = self.run_sync(command="update")
+        self.assertEqual(result, 0)
+        self.assertIn("UNCHANGED one", output)
+        publish.assert_not_called()
+        save.assert_not_called()
+        self.assertEqual(self.state_file.read_bytes(), before)
+
+    def test_failed_source_preserves_its_skills_and_other_sources_continue(self):
+        self.set_manifest({"owner/pack": ["one", "two"], "other/pack": ["three"]})
+        self.run_sync()
+
+        def failed_source(names, source, stage):
+            if source == "owner/pack":
+                raise subprocess.CalledProcessError(1, "skills")
+            for name in names:
+                self.write_skill(stage / name, "updated")
+            return stage
+
+        result, _, download = self.run_sync(failed_source, command="update")
+        self.assertEqual(result, 1)
+        self.assertEqual(download.call_count, 2)
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "original")
+        self.assertEqual((self.root / "two/SKILL.md").read_text(), "original")
+        self.assertEqual((self.root / "three/SKILL.md").read_text(), "updated")
+
     def test_partial_failure_keeps_previous_install_and_installs_other_items(self):
         self.run_sync()
         self.set_manifest({"owner/pack": ["one", "two"]})
 
-        def unavailable(name, source, stage):
-            if name == "one":
-                raise subprocess.CalledProcessError(1, "skills")
-            return self.fetch(name, source, stage)
+        def unavailable(names, source, stage):
+            for name in names:
+                if name != "one":
+                    self.write_skill(stage / name)
+            return stage
 
         result, _, _ = self.run_sync(unavailable, command="update")
         self.assertEqual(result, 1)
@@ -192,19 +248,19 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(before, skills.read_json(self.state_file))
 
     def test_cli_zero_exit_without_requested_skill_is_rejected(self):
-        with (
-            patch("shutil.which", return_value="bunx"),
-            patch("subprocess.run"),
-            self.assertRaises(ValueError),
-        ):
-            skills.download("absent", "owner/pack", self.base)
+        with patch("shutil.which", return_value="bunx"), patch("subprocess.run"):
+            result, _, _ = self.run_sync(fetch=skills.download)
+        self.assertEqual(result, 1)
+        self.assertFalse((self.root / "one").exists())
 
     def test_edit_during_download_is_preserved(self):
         self.run_sync()
 
-        def concurrent_edit(name, source, stage):
-            (self.root / name / "SKILL.md").write_text("edited during fetch")
-            return self.write_skill(stage / name, "downloaded")
+        def concurrent_edit(names, source, stage):
+            for name in names:
+                (self.root / name / "SKILL.md").write_text("edited during fetch")
+                self.write_skill(stage / name, "downloaded")
+            return stage
 
         result, output, _ = self.run_sync(concurrent_edit, command="update")
         self.assertEqual(result, 1)
