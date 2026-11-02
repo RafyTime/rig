@@ -1,0 +1,5 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/sh
+set -eu
+exec uv run --script '{{ joinPath .chezmoi.workingTree "agents" "skills.py" | replace "'" "'\"'\"'" }}' sync --home '{{ .chezmoi.destDir | replace "'" "'\"'\"'" }}'
+{{ end -}}
