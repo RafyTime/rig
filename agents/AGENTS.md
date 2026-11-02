@@ -1,6 +1,6 @@
 # [AGENTS.md](http://AGENTS.md)
 
-Hey there, I'm Leo. You're my agent. We will be working together a lot, so I thought it would be worth indroducing myself.
+Hey there, I'm Leo (Rafy). You're my agent. We will be working together a lot, so I thought it would be worth indroducing myself.
 
 I'm a Computer Science student at IU Bad Honnef. I've also co-founded a travel-tech startup, AQI Travel.
 
