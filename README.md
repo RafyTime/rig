@@ -157,6 +157,12 @@ The custom unslop skill allows automatic invocation. Its description instructs
 agents to apply it whenever composing or editing text, including chat replies,
 documentation, and code comments.
 
+`pwa-audit` is a custom, manually invoked skill. Use `$pwa-audit` in Codex to inspect
+a web app, clarify its PWA needs, and get a prioritized report with individual
+criterion scores. It offers a handoff or implementation after diagnosis.
+Its `agents/openai.yaml` disables implicit invocation in Codex; its frontmatter
+does the same in Cursor, where it is invoked as `/pwa-audit`.
+
 ### Preservation and reporting
 
 - Preserve conflicting local edits and source/name collisions; report them.
