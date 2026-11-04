@@ -24,8 +24,7 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Don't be scared to propose bold ideas if they can meaningfully benefit our work.
 - Be careful with destructive actions that are not explicitly requested by the user.
 - Tests are good! Endless smoke tests, "regression tests" for feature deletion, etc, much less good. Tests should be focused, not slop.
-- Comments are a great way to clarify functionality and how code is used. Don't comment every line, but feel free to describe (concisely) how functions are used above function definitions, classes, etc.
-- Keep comments up to date! When making changes, it is important to keep things in sync.
+- Use concise comments to explain intent or non-obvious behavior, and keep them current & in sync with relevant ADRs (if any).
 
 ### Typescript
 
@@ -36,8 +35,7 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 
 ## Questions are read-only
 
-- A question is a request for an answer, not changes. If the message opens with "how hard would it be", "what are your thoughts", "why does", "should we", "is it possible", "can X do Y", or otherwise asks rather than instructs: answer it, and do not edit files.
-- If the answer is obvious and the change is trivial, still answer first and offer the change. Ask before making it.
+- For questions and exploratory discussion, answer without editing files. Offer changes and wait for approval.
 
 ## Subagents
 
