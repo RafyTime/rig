@@ -51,6 +51,12 @@
       "skills": [
         "frontend-design"
       ]
+    },
+    {
+      "source": "huntabyte/shadcn-svelte",
+      "skills": [
+        "shadcn-svelte"
+      ]
     }
   ]
 }
