@@ -10,8 +10,12 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 
 ## General
 
-- Do not commit, push, or open pull requests unless explicitly requested by the user.
-- Always run any available quality checks (lint, format, typecheck, tests...) after finishing some unit of work.
+- Commit completed units of work when it helps advance the task.
+- Use Gitmoji commit messages. Keep them short and descriptive.
+- Ask for approval before pushing or opening a pull request. Push only when the task is complete to avoid unnecessary CI runs or deployments.
+- Name branches after their purpose, using prefixes (feat/, fix/, refactor/, docs/, chore/...) followed by a short kebab-case description. Do not use agent names as prefixes (no "codex/feature-slug...").
+- Never force-push, rewrite shared history, or push directly to the default branch without explicit approval.
+- Run checks proportionate to the change. For prose-only edits, review the diff & format; for behavior changes, run relevant checks before committing.
 
 ## Coding Preferences
 
