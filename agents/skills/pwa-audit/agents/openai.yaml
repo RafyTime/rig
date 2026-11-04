@@ -1,0 +1,6 @@
+interface:
+  display_name: "PWA Audit"
+  short_description: "Audit PWA readiness against real product needs"
+  default_prompt: "Use $pwa-audit to assess this project, clarify its PWA needs, and recommend the essential next steps."
+policy:
+  allow_implicit_invocation: false
