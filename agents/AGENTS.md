@@ -25,13 +25,13 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Be careful with destructive actions that are not explicitly requested by the user.
 - Tests are good! Endless smoke tests, "regression tests" for feature deletion, etc, much less good. Tests should be focused, not slop.
 - Use concise comments to explain intent or non-obvious behavior, and keep them current & in sync with relevant ADRs (if any).
+- Make failure modes explicit. Handle errors where recovery is possible; otherwise propagate them with useful context. Avoid silent failures.
 
-### Typescript
+### TypeScript
 
-- `any` is the enemy. Inferred types are our friend. Our systems should adapt changes, instead of requiring changes everywhere.
-- If your TS code looks like python, it is bad TS code.
-- Avoid one-line functions that are just casting wrappers.
-- Write TypeScripts in ways Matt Pocock and Theo (t3.gg) would be proud of.
+- Write TypeScript that Matt Pocock and Theo Browne would be proud of.
+- Avoid `any`. Prefer inferred and derived types so changes propagate through the type system.
+- Avoid functions that only wrap a type assertion.
 
 ## Questions are read-only
 
