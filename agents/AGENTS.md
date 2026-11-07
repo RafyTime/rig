@@ -27,6 +27,12 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Use concise comments to explain intent or non-obvious behavior, and keep them current & in sync with relevant ADRs (if any).
 - Make failure modes explicit. Handle errors where recovery is possible; otherwise propagate them with useful context. Avoid silent failures.
 
+### Tooling
+
+- Use `uv` for Python dependency management, environments, and running scripts and tools.
+- For JavaScript and TypeScript, prefer Vite+ (`vp`) where supported; otherwise use Bun for dependency management and running scripts and tools.
+- If these tools cannot support a required workflow, explain the limitation before using an alternative. Keep existing lockfiles and package-manager configuration unless a migration is requested.
+
 ### TypeScript
 
 - Write TypeScript that Matt Pocock and Theo Browne would be proud of.
