@@ -10,7 +10,7 @@ setting up another device.
   deployed directly.
 - `agents/AGENTS.md` is the canonical personal instructions file. Templates
   render followers at `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`, and
-  `~/.cursor/rules/personal.mdc` (always applied).
+  `~/.cursor/rules/personal.mdc` (always applied), and `~/.claude/CLAUDE.md`.
 - Codex and Cursor share global skills in `~/.agents/skills/`.
 - `zed/` contains reference settings, not yet managed by chezmoi.
 
@@ -133,6 +133,11 @@ The Codex target uses the shared global `.agents/skills` location, also read by
 Cursor. To test unpublished changes, replace `RafyTime/rig` with the local repo
 path. Run installs from a different directory if testing project-scoped installs
 so the source repo stays clean.
+
+Claude Code reads personal instructions from `~/.claude/CLAUDE.md`. Recent
+versions also read a project's `AGENTS.md` when no project `CLAUDE.md` takes
+precedence; check `/memory` in Claude Code to see loaded instructions. Claude
+uses `~/.claude/skills/` for personal skills, which rig does not yet manage.
 
 `agents/skills/unslop/SKILL.md` is the first custom skill, forked from the
 installed `cursor/plugins` version. Edit this source in rig, then run
