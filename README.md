@@ -112,8 +112,10 @@ results appear together at the end, with captured CLI diagnostics for failures.
   `chezmoi update` means pull rig and apply, not refresh upstream skills.
 - Missing downloads fetch current upstream content. Exact version parity and
   revision pinning are deferred. New upstream skills require explicit selection.
-- Initially manage only `~/.agents/skills/`. Keep destination handling separate
-  so Claude's `~/.claude/skills/` can be added later.
+- Link selected skills individually into `~/.claude/skills/`. Existing matching
+  links are left unowned; conflicting entries are preserved and reported.
+  Rig-owned links for removed selections require confirmation before removal.
+  Windows symlink creation may require Developer Mode or suitable privileges.
 
 ### Custom skills and forks
 
@@ -137,7 +139,9 @@ so the source repo stays clean.
 Claude Code reads personal instructions from `~/.claude/CLAUDE.md`. Recent
 versions also read a project's `AGENTS.md` when no project `CLAUDE.md` takes
 precedence; check `/memory` in Claude Code to see loaded instructions. Claude
-uses `~/.claude/skills/` for personal skills, which rig does not yet manage.
+uses `~/.claude/skills/` for personal skills. Rig links selected skills there;
+unlisted Claude skills remain untouched. Some skills may still contain
+provider-specific instructions and need adaptation.
 
 `agents/skills/unslop/SKILL.md` is the first custom skill, forked from the
 installed `cursor/plugins` version. Edit this source in rig, then run
@@ -204,7 +208,8 @@ and preserves the installed copy. Dry runs plan actions without fetching sources
 The manifest was seeded from 30 CLI-recorded selections. Skills without source
 metadata remain installed and unlisted until classified. The earlier vendored
 snapshots and brittle shell restore script have been removed; installed skills
-are preserved. No project skills or Claude-specific destinations are managed yet.
+are preserved. Project skills are not managed yet. Claude link ownership is stored
+separately in `~/.local/state/rig/claude-links.json`.
 
 Run checks from the repo root:
 

@@ -164,6 +164,88 @@ def publish(candidate, target, state, record, state_file):
             raise
 
 
+def reconcile_claude(args, selected, root, results, failures):
+    destination = args.home / ".claude" / "skills"
+    state_file = args.home / ".local" / "state" / "rig" / "claude-links.json"
+    state = read_json(state_file) or {"version": 1, "links": []}
+    if (
+        state.get("version") != 1
+        or not isinstance(state.get("links"), list)
+        or any(not valid_name(name) for name in state["links"])
+    ):
+        raise ValueError(f"invalid Claude link state: {state_file}")
+    owned = set(state["links"])
+
+    def save():
+        state["links"] = sorted(owned)
+        save_json(state_file, state)
+
+    def matches(link, source):
+        return link.is_symlink() and link.resolve() == source.resolve()
+
+    if destination.exists() and linked(destination):
+        raise ValueError(f"linked Claude skills root; inspect {destination}")
+    for name in sorted(selected):
+        source, target = root / name, destination / name
+        try:
+            if matches(target, source):
+                results.append(f"CLAUDE OK {name}")
+            elif target.exists() or linked(target):
+                raise ValueError("existing entry preserved")
+            elif args.dry_run:
+                results.append(f"CLAUDE WOULD LINK {name} (if installed)")
+            elif name in failures:
+                raise ValueError("shared skill reconciliation failed")
+            elif not (source / "SKILL.md").is_file():
+                raise ValueError("shared skill is unavailable")
+            else:
+                destination.mkdir(parents=True, exist_ok=True)
+                target.symlink_to(
+                    os.path.relpath(source, destination), target_is_directory=True
+                )
+                try:
+                    owned.add(name)
+                    save()
+                except BaseException:
+                    target.unlink()
+                    raise
+                results.append(f"CLAUDE LINKED {name}")
+        except (OSError, ValueError) as error:
+            failures.append(name)
+            results.append(f"CLAUDE ERROR {name}: {error}")
+
+    for name in sorted(owned - set(selected)):
+        target = destination / name
+        if not target.exists() and not linked(target):
+            if not args.dry_run:
+                owned.remove(name)
+                save()
+            continue
+        if not matches(target, root / name):
+            failures.append(name)
+            results.append(f"CLAUDE ERROR {name}: changed link preserved")
+            continue
+        confirmed = (
+            not args.dry_run
+            and sys.stdin.isatty()
+            and input(f"Remove managed Claude link {name}? [y/N] ").strip().lower()
+            == "y"
+        )
+        if confirmed:
+            if not matches(target, root / name):
+                failures.append(name)
+                results.append(f"CLAUDE ERROR {name}: changed link preserved")
+                continue
+            target.unlink()
+            owned.remove(name)
+            save()
+            results.append(f"CLAUDE REMOVED {name}")
+        else:
+            results.append(f"CLAUDE REMOVE pending: {name}")
+            if not args.dry_run:
+                failures.append(name)
+
+
 def reconcile(args):
     selected = selections(read_json(args.manifest), REPO)
     root = args.home / ".agents" / "skills"
@@ -344,6 +426,7 @@ def reconcile(args):
             results.append("REMOVE pending: " + ", ".join(removals))
             if not args.dry_run:
                 failures.extend(removals)
+    reconcile_claude(args, selected, root, results, failures)
     if root.exists():
         unlisted = sorted(
             p.name

@@ -88,6 +88,43 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result, 0)
         download.assert_called_once()
 
+    def test_claude_links_preserve_existing_entries_and_track_owned_removal(self):
+        claude = self.home / ".claude/skills"
+        self.write_skill(claude / "other")
+        self.assertEqual(self.run_sync()[0], 0)
+        link = claude / "one"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), (self.root / "one").resolve())
+        self.set_manifest()
+        with patch("sys.stdin.isatty", return_value=False):
+            self.assertEqual(self.run_sync()[0], 1)
+        self.assertTrue(link.is_symlink())
+        with (
+            patch("sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="y"),
+        ):
+            self.assertEqual(self.run_sync()[0], 0)
+        self.assertFalse(link.is_symlink())
+        self.assertTrue((claude / "other/SKILL.md").exists())
+
+    def test_claude_conflict_and_existing_link_are_never_adopted(self):
+        claude = self.home / ".claude/skills"
+        self.write_skill(claude / "one", "independent")
+        self.assertEqual(self.run_sync()[0], 1)
+        self.assertEqual((claude / "one/SKILL.md").read_text(), "independent")
+        import shutil
+
+        shutil.rmtree(claude / "one")
+        (claude / "one").symlink_to(self.root / "one", target_is_directory=True)
+        self.assertEqual(self.run_sync()[0], 0)
+        self.set_manifest()
+        with (
+            patch("sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="y"),
+        ):
+            self.assertEqual(self.run_sync()[0], 0)
+        self.assertTrue((claude / "one").is_symlink())
+
     def test_update_refreshes_selected_only_and_preserves_unlisted(self):
         self.run_sync()
         self.write_skill(self.root / "unlisted")
