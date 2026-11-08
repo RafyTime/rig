@@ -292,7 +292,9 @@ def reconcile_claude(args, selected, root, results, failures):
             confirmed = (
                 not args.dry_run
                 and sys.stdin.isatty()
-                and input(f"Remove managed Claude skill {name}? [y/N] ").strip().lower()
+                and input(f"⚠️ Remove managed Claude skill {name}? [y/N] ")
+                .strip()
+                .lower()
                 == "y"
             )
             if not confirmed:
@@ -477,11 +479,11 @@ def reconcile(args):
             report_error(name, error)
     if removals:
         if not args.dry_run and sys.stdin.isatty():
-            print("\nRemove managed skills: " + ", ".join(removals), flush=True)
+            print("\n⚠️ Remove managed skills: " + ", ".join(removals), flush=True)
         confirmed = (
             not args.dry_run
             and sys.stdin.isatty()
-            and input("Remove these managed skills? [y/N] ").strip().lower() == "y"
+            and input("⚠️ Remove these managed skills? [y/N] ").strip().lower() == "y"
         )
         if confirmed:
             for name in removals:
@@ -503,22 +505,21 @@ def reconcile(args):
     reconcile_claude(args, selected, root, results, failures)
     incomplete = len(set(failures))
     action = f"{args.command} plan" if args.dry_run else args.command
+    status = "⚠️" if incomplete else "📋" if args.dry_run else "✅"
     print(
-        f"Skills {action}: {len(selected)} selected across .agents and .claude; "
+        f"{status} Skills {action}: {len(selected)} selected across .agents and .claude; "
         f"{incomplete} incomplete."
     )
     for result in results:
         # Keep diagnostics and pending decisions visible. Dry runs also show plans.
-        if result.startswith(
-            (
-                "❌ ERROR ",
-                "CLAUDE ERROR ",
-                "  ",
-                "REMOVE pending:",
-                "CLAUDE REMOVE pending:",
-            )
-        ) or (args.dry_run and result.startswith(("WOULD ", "CLAUDE WOULD "))):
+        if result.startswith(("❌ ERROR ", "  ")):
             print(result)
+        elif result.startswith("CLAUDE ERROR "):
+            print(f"❌ {result}")
+        elif result.startswith(("REMOVE pending:", "CLAUDE REMOVE pending:")):
+            print(f"⚠️ {result}")
+        elif args.dry_run and result.startswith(("WOULD ", "CLAUDE WOULD ")):
+            print(f"📋 {result}")
     return int(bool(failures))
 
 
@@ -555,12 +556,12 @@ def main():
             lock.unlink()
     except FileExistsError:
         print(
-            f"Another sync or stale lock exists: {lock}. Inspect before removing it.",
+            f"⚠️ Another sync or stale lock exists: {lock}. Inspect before removing it.",
             file=sys.stderr,
         )
         return 1
     except (ValueError, OSError, KeyError, TypeError, EOFError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
+        print(f"❌ ERROR: {error}", file=sys.stderr)
         return 1
 
 

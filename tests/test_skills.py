@@ -81,7 +81,7 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(
             output,
-            "Skills sync: 1 selected across .agents and .claude; 0 incomplete.\n",
+            "✅ Skills sync: 1 selected across .agents and .claude; 0 incomplete.\n",
         )
         result, _, download = self.run_sync()
         self.assertEqual(result, 0)
@@ -216,7 +216,7 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(
             output,
-            "Skills update: 1 selected across .agents and .claude; 0 incomplete.\n",
+            "✅ Skills update: 1 selected across .agents and .claude; 0 incomplete.\n",
         )
         publish.assert_not_called()
         save.assert_not_called()
@@ -253,7 +253,7 @@ class SkillsTest(unittest.TestCase):
 
         result, output, _ = self.run_sync(noisy_fetch)
         self.assertEqual(result, 1)
-        summary = output.index("Skills sync:")
+        summary = output.index("⚠️ Skills sync:")
         self.assertLess(output.index("CLI other/pack"), summary)
         self.assertGreater(output.index("ERROR remote:owner/pack"), summary)
         self.assertGreater(output.index("Upstream unavailable"), summary)
@@ -380,9 +380,9 @@ class SkillsTest(unittest.TestCase):
     def test_dry_run_does_not_download_create_state_or_remove(self):
         result, output, download = self.run_sync(dry_run=True)
         self.assertEqual(result, 0)
-        self.assertIn("Skills sync plan:", output)
-        self.assertIn("WOULD INSTALL one", output)
-        self.assertIn("CLAUDE WOULD INSTALL one", output)
+        self.assertIn("📋 Skills sync plan:", output)
+        self.assertIn("📋 WOULD INSTALL one", output)
+        self.assertIn("📋 CLAUDE WOULD INSTALL one", output)
         download.assert_not_called()
         self.assertFalse(self.home.exists())
 
