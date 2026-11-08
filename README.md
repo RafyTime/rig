@@ -96,11 +96,13 @@ the CLI's global lock file is no longer the shared inventory.
 
 Downloads are batched by source, with one CLI call per downloaded source during
 an update. Each requested skill is verified independently, and
-unchanged contents are reported as `UNCHANGED` without replacing installed
-files. Missing selections are reported individually; a failed CLI call preserves
-all installations from that source while other sources continue.
-Normal CLI output is hidden behind one progress line per source. Per-skill
-results appear together at the end, with captured CLI diagnostics for failures.
+unchanged contents are kept without replacing installed files. Missing selections
+are reported individually; a failed CLI call preserves all installations from
+that source while other sources continue. Apply and explicit skill updates print
+one summary line, followed only by errors, failure diagnostics, and pending
+removals. Successful per-skill results and unlisted skills are omitted. Dry runs
+also list planned changes so they can be reviewed before applying.
+
 
 - One manifest selects sources and names for downloaded and custom skills.
   Add shared skills there; direct CLI installs remain local until selected.
@@ -184,7 +186,7 @@ does the same in Cursor, where it is invoked as `/pwa-audit`.
 - Removing a selection proposes deletion only of its previously managed copy,
   with preview and confirmation. Unattended runs preserve pending removals and
   report incomplete results. Modified copies remain conflicts.
-- Report unlisted local skills informationally and leave them untouched.
+- Leave unlisted local skills untouched and omit them from routine output.
 - Continue independent installations after failures; summarize failures and
   return an unsuccessful result. Apply other configuration before skill sync.
 - Already-installed selections should reconcile offline. Missing skills offline

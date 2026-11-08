@@ -425,10 +425,6 @@ def reconcile(args):
             with tempfile.TemporaryDirectory(prefix="rig-fetch-") as staging:
                 downloaded = None
                 if items[0][1] is None:
-                    print(
-                        f"Checking {source.removeprefix('remote:')} ({len(items)} skills)…",
-                        flush=True,
-                    )
                     downloaded = download(
                         [name for name, _, _ in items],
                         source.removeprefix("remote:"),
@@ -505,23 +501,24 @@ def reconcile(args):
             if not args.dry_run:
                 failures.extend(removals)
     reconcile_claude(args, selected, root, results, failures)
-    if root.exists():
-        unlisted = sorted(
-            p.name
-            for p in root.iterdir()
-            if not p.name.startswith(".")
-            and p.name not in selected
-            and p.name not in records
-        )
-        if unlisted:
-            results.append("ℹ️ UNLISTED (untouched): " + ", ".join(unlisted))
-    print("\n📋 Skill results" + (" (dry run)" if args.dry_run else ""))
-    for result in results:
-        print(result)
-    status = "⚠️" if failures else "✅"
+    incomplete = len(set(failures))
+    action = f"{args.command} plan" if args.dry_run else args.command
     print(
-        f"{status} Skills: {len(selected)} selected; {len(set(failures))} incomplete."
+        f"Skills {action}: {len(selected)} selected across .agents and .claude; "
+        f"{incomplete} incomplete."
     )
+    for result in results:
+        # Keep diagnostics and pending decisions visible. Dry runs also show plans.
+        if result.startswith(
+            (
+                "❌ ERROR ",
+                "CLAUDE ERROR ",
+                "  ",
+                "REMOVE pending:",
+                "CLAUDE REMOVE pending:",
+            )
+        ) or (args.dry_run and result.startswith(("WOULD ", "CLAUDE WOULD "))):
+            print(result)
     return int(bool(failures))
 
 

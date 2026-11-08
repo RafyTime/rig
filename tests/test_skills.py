@@ -77,7 +77,12 @@ class SkillsTest(unittest.TestCase):
         return result, output.getvalue(), download
 
     def test_missing_installs_existing_sync_is_offline_and_deleted_skill_restores(self):
-        self.assertEqual(self.run_sync()[0], 0)
+        result, output, _ = self.run_sync()
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            output,
+            "Skills sync: 1 selected across .agents and .claude; 0 incomplete.\n",
+        )
         result, _, download = self.run_sync()
         self.assertEqual(result, 0)
         download.assert_not_called()
@@ -147,7 +152,8 @@ class SkillsTest(unittest.TestCase):
             (self.home / ".claude/skills/one/SKILL.md").read_text(), "newer"
         )
         download.assert_called_once()
-        self.assertIn("UNLISTED (untouched): unlisted", output)
+        self.assertNotIn("unlisted", output)
+        self.assertTrue((self.root / "unlisted/SKILL.md").exists())
 
     def test_claude_local_edits_survive_shared_update(self):
         self.run_sync()
@@ -208,7 +214,10 @@ class SkillsTest(unittest.TestCase):
         ):
             result, output, _ = self.run_sync(command="update")
         self.assertEqual(result, 0)
-        self.assertIn("UNCHANGED one", output)
+        self.assertEqual(
+            output,
+            "Skills update: 1 selected across .agents and .claude; 0 incomplete.\n",
+        )
         publish.assert_not_called()
         save.assert_not_called()
         self.assertEqual(self.state_file.read_bytes(), before)
@@ -244,11 +253,11 @@ class SkillsTest(unittest.TestCase):
 
         result, output, _ = self.run_sync(noisy_fetch)
         self.assertEqual(result, 1)
-        summary = output.index("📋 Skill results")
+        summary = output.index("Skills sync:")
         self.assertLess(output.index("CLI other/pack"), summary)
         self.assertGreater(output.index("ERROR remote:owner/pack"), summary)
         self.assertGreater(output.index("Upstream unavailable"), summary)
-        self.assertGreater(output.index("INSTALLED two"), summary)
+        self.assertNotIn("INSTALLED two", output)
         self.assertNotIn("\x1b[", output)
 
     def test_download_captures_successful_cli_output(self):
@@ -369,8 +378,11 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual((self.root / "one/SKILL.md").read_text(), "unknown origin")
 
     def test_dry_run_does_not_download_create_state_or_remove(self):
-        result, _, download = self.run_sync(dry_run=True)
+        result, output, download = self.run_sync(dry_run=True)
         self.assertEqual(result, 0)
+        self.assertIn("Skills sync plan:", output)
+        self.assertIn("WOULD INSTALL one", output)
+        self.assertIn("CLAUDE WOULD INSTALL one", output)
         download.assert_not_called()
         self.assertFalse(self.home.exists())
 
