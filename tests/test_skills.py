@@ -77,7 +77,12 @@ class SkillsTest(unittest.TestCase):
         return result, output.getvalue(), download
 
     def test_missing_installs_existing_sync_is_offline_and_deleted_skill_restores(self):
-        self.assertEqual(self.run_sync()[0], 0)
+        result, output, _ = self.run_sync()
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            output,
+            "✅ Skills sync: 1 selected across .agents and .claude; 0 incomplete.\n",
+        )
         result, _, download = self.run_sync()
         self.assertEqual(result, 0)
         download.assert_not_called()
@@ -88,17 +93,19 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result, 0)
         download.assert_called_once()
 
-    def test_claude_links_preserve_existing_entries_and_track_owned_removal(self):
+    def test_claude_copies_preserve_existing_entries_and_track_owned_removal(self):
         claude = self.home / ".claude/skills"
         self.write_skill(claude / "other")
         self.assertEqual(self.run_sync()[0], 0)
         link = claude / "one"
-        self.assertTrue(link.is_symlink())
-        self.assertEqual(link.resolve(), (self.root / "one").resolve())
+        self.assertTrue(link.is_dir())
+        self.assertFalse(link.is_symlink())
+        self.assertEqual(skills.digest(link), skills.digest(self.root / "one"))
         self.set_manifest()
         with patch("sys.stdin.isatty", return_value=False):
             self.assertEqual(self.run_sync()[0], 1)
-        self.assertTrue(link.is_symlink())
+        self.assertTrue(link.is_dir())
+        self.assertFalse(link.is_symlink())
         with (
             patch("sys.stdin.isatty", return_value=True),
             patch("builtins.input", return_value="y"),
@@ -107,7 +114,7 @@ class SkillsTest(unittest.TestCase):
         self.assertFalse(link.is_symlink())
         self.assertTrue((claude / "other/SKILL.md").exists())
 
-    def test_claude_conflict_and_existing_link_are_never_adopted(self):
+    def test_claude_conflict_is_preserved_and_expected_link_migrates(self):
         claude = self.home / ".claude/skills"
         self.write_skill(claude / "one", "independent")
         self.assertEqual(self.run_sync()[0], 1)
@@ -117,13 +124,17 @@ class SkillsTest(unittest.TestCase):
         shutil.rmtree(claude / "one")
         (claude / "one").symlink_to(self.root / "one", target_is_directory=True)
         self.assertEqual(self.run_sync()[0], 0)
+        self.assertFalse((claude / "one").is_symlink())
+        self.assertEqual(
+            skills.digest(claude / "one"), skills.digest(self.root / "one")
+        )
         self.set_manifest()
         with (
             patch("sys.stdin.isatty", return_value=True),
             patch("builtins.input", return_value="y"),
         ):
             self.assertEqual(self.run_sync()[0], 0)
-        self.assertTrue((claude / "one").is_symlink())
+        self.assertFalse((claude / "one").exists())
 
     def test_update_refreshes_selected_only_and_preserves_unlisted(self):
         self.run_sync()
@@ -137,8 +148,44 @@ class SkillsTest(unittest.TestCase):
         result, output, download = self.run_sync(newer, command="update")
         self.assertEqual(result, 0)
         self.assertEqual((self.root / "one/SKILL.md").read_text(), "newer")
+        self.assertEqual(
+            (self.home / ".claude/skills/one/SKILL.md").read_text(), "newer"
+        )
         download.assert_called_once()
-        self.assertIn("UNLISTED (untouched): unlisted", output)
+        self.assertNotIn("unlisted", output)
+        self.assertTrue((self.root / "unlisted/SKILL.md").exists())
+
+    def test_claude_local_edits_survive_shared_update(self):
+        self.run_sync()
+        target = self.home / ".claude/skills/one/SKILL.md"
+        target.write_text("my changes")
+
+        def newer(names, source, stage):
+            for name in names:
+                self.write_skill(stage / name, "newer")
+            return stage
+
+        self.assertEqual(self.run_sync(newer, command="update")[0], 1)
+        self.assertEqual(target.read_text(), "my changes")
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "newer")
+
+    def test_claude_migration_rolls_back_if_state_write_fails(self):
+        source = self.write_skill(self.root / "one")
+        target = self.home / ".claude/skills/one"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source, target_is_directory=True)
+        results, failures = [], []
+        with patch.object(skills, "save_json", side_effect=OSError("disk full")):
+            skills.reconcile_claude(
+                self.args,
+                {"one": {"source": "remote:owner/pack"}},
+                self.root,
+                results,
+                failures,
+            )
+        self.assertEqual(failures, ["one"])
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(target.resolve(), source.resolve())
 
     def test_downloads_once_per_source_with_only_requested_names(self):
         self.set_manifest({"owner/pack": ["one", "two"], "other/pack": ["three"]})
@@ -167,7 +214,10 @@ class SkillsTest(unittest.TestCase):
         ):
             result, output, _ = self.run_sync(command="update")
         self.assertEqual(result, 0)
-        self.assertIn("UNCHANGED one", output)
+        self.assertEqual(
+            output,
+            "✅ Skills update: 1 selected across .agents and .claude; 0 incomplete.\n",
+        )
         publish.assert_not_called()
         save.assert_not_called()
         self.assertEqual(self.state_file.read_bytes(), before)
@@ -203,11 +253,11 @@ class SkillsTest(unittest.TestCase):
 
         result, output, _ = self.run_sync(noisy_fetch)
         self.assertEqual(result, 1)
-        summary = output.index("📋 Skill results")
+        summary = output.index("⚠️ Skills sync:")
         self.assertLess(output.index("CLI other/pack"), summary)
         self.assertGreater(output.index("ERROR remote:owner/pack"), summary)
         self.assertGreater(output.index("Upstream unavailable"), summary)
-        self.assertGreater(output.index("INSTALLED two"), summary)
+        self.assertNotIn("INSTALLED two", output)
         self.assertNotIn("\x1b[", output)
 
     def test_download_captures_successful_cli_output(self):
@@ -270,6 +320,31 @@ class SkillsTest(unittest.TestCase):
         self.assertTrue((self.root / "one/SKILL.md").is_file())
         self.assertTrue((self.root / "two/SKILL.md").is_file())
 
+    def test_custom_update_preview_includes_claude_without_writing(self):
+        custom = self.write_skill(self.repo / "custom/mine")
+        self.set_manifest({"./custom": ["mine"]})
+        self.assertEqual(self.run_sync()[0], 0)
+        (custom / "SKILL.md").write_text("new custom contents")
+        result, output, download = self.run_sync(dry_run=True)
+        self.assertEqual(result, 0)
+        self.assertIn("📋 WOULD UPDATE mine", output)
+        self.assertIn("📋 CLAUDE WOULD UPDATE mine", output)
+        download.assert_not_called()
+        self.assertEqual((self.root / "mine/SKILL.md").read_text(), "original")
+        self.assertEqual(
+            (self.home / ".claude/skills/mine/SKILL.md").read_text(), "original"
+        )
+
+    def test_missing_shared_preview_reports_unmanaged_claude_conflict(self):
+        target = self.write_skill(self.home / ".claude/skills/one", "independent")
+        result, output, download = self.run_sync(dry_run=True)
+        self.assertEqual(result, 1)
+        self.assertIn("❌ CLAUDE ERROR one: unmanaged installation", output)
+        self.assertNotIn("CLAUDE WOULD INSTALL one", output)
+        download.assert_not_called()
+        self.assertEqual((target / "SKILL.md").read_text(), "independent")
+        self.assertFalse(self.root.exists())
+
     def test_owned_download_can_be_explicitly_forked_to_identical_custom_source(self):
         self.run_sync()
         custom = self.write_skill(self.repo / "custom/one")
@@ -328,8 +403,11 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual((self.root / "one/SKILL.md").read_text(), "unknown origin")
 
     def test_dry_run_does_not_download_create_state_or_remove(self):
-        result, _, download = self.run_sync(dry_run=True)
+        result, output, download = self.run_sync(dry_run=True)
         self.assertEqual(result, 0)
+        self.assertIn("📋 Skills sync plan:", output)
+        self.assertIn("📋 WOULD INSTALL one", output)
+        self.assertIn("📋 CLAUDE WOULD INSTALL one", output)
         download.assert_not_called()
         self.assertFalse(self.home.exists())
 

@@ -96,11 +96,13 @@ the CLI's global lock file is no longer the shared inventory.
 
 Downloads are batched by source, with one CLI call per downloaded source during
 an update. Each requested skill is verified independently, and
-unchanged contents are reported as `UNCHANGED` without replacing installed
-files. Missing selections are reported individually; a failed CLI call preserves
-all installations from that source while other sources continue.
-Normal CLI output is hidden behind one progress line per source. Per-skill
-results appear together at the end, with captured CLI diagnostics for failures.
+unchanged contents are kept without replacing installed files. Missing selections
+are reported individually; a failed CLI call preserves all installations from
+that source while other sources continue. Apply and explicit skill updates print
+one summary line, followed only by errors, failure diagnostics, and pending
+removals. Successful per-skill results and unlisted skills are omitted. Dry runs
+also list planned changes so they can be reviewed before applying.
+
 
 - One manifest selects sources and names for downloaded and custom skills.
   Add shared skills there; direct CLI installs remain local until selected.
@@ -112,10 +114,14 @@ results appear together at the end, with captured CLI diagnostics for failures.
   `chezmoi update` means pull rig and apply, not refresh upstream skills.
 - Missing downloads fetch current upstream content. Exact version parity and
   revision pinning are deferred. New upstream skills require explicit selection.
-- Link selected skills individually into `~/.claude/skills/`. Existing matching
-  links are left unowned; conflicting entries are preserved and reported.
-  Rig-owned links for removed selections require confirmation before removal.
-  Windows symlink creation may require Developer Mode or suitable privileges.
+- Maintain ordinary copies of selected skills in both `~/.agents/skills/` and
+  `~/.claude/skills/`, downloading each source only once. Each destination has
+  its own ownership baseline and local-edit protection. No symlink privileges
+  or Windows Developer Mode are needed.
+- Migrate selected Claude symlinks pointing to the expected shared skill into
+  ordinary copies automatically. Preserve other links and unmanaged directories.
+  Identical unmanaged Claude copies can be adopted with `--adopt-existing`.
+  Removed managed copies require confirmation in each destination.
 
 ### Custom skills and forks
 
@@ -139,9 +145,8 @@ so the source repo stays clean.
 Claude Code reads personal instructions from `~/.claude/CLAUDE.md`. Recent
 versions also read a project's `AGENTS.md` when no project `CLAUDE.md` takes
 precedence; check `/memory` in Claude Code to see loaded instructions. Claude
-uses `~/.claude/skills/` for personal skills. Rig links selected skills there;
-unlisted Claude skills remain untouched. Some skills may still contain
-provider-specific instructions and need adaptation.
+uses `~/.claude/skills/` for personal skills. Rig maintains selected copies there;
+unlisted Claude skills remain untouched.
 
 `agents/skills/unslop/SKILL.md` is the first custom skill, forked from the
 installed `cursor/plugins` version. Edit this source in rig, then run
@@ -181,7 +186,7 @@ does the same in Cursor, where it is invoked as `/pwa-audit`.
 - Removing a selection proposes deletion only of its previously managed copy,
   with preview and confirmation. Unattended runs preserve pending removals and
   report incomplete results. Modified copies remain conflicts.
-- Report unlisted local skills informationally and leave them untouched.
+- Leave unlisted local skills untouched and omit them from routine output.
 - Continue independent installations after failures; summarize failures and
   return an unsuccessful result. Apply other configuration before skill sync.
 - Already-installed selections should reconcile offline. Missing skills offline
@@ -208,8 +213,9 @@ and preserves the installed copy. Dry runs plan actions without fetching sources
 The manifest was seeded from 30 CLI-recorded selections. Skills without source
 metadata remain installed and unlisted until classified. The earlier vendored
 snapshots and brittle shell restore script have been removed; installed skills
-are preserved. Project skills are not managed yet. Claude link ownership is stored
-separately in `~/.local/state/rig/claude-links.json`.
+are preserved. Project skills are not managed yet. Claude copy ownership is stored
+separately in `~/.local/state/rig/claude-skills.json`. The earlier
+`claude-links.json` is retained only to track old links awaiting migration or removal.
 
 Run checks from the repo root:
 

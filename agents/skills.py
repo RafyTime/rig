@@ -133,16 +133,22 @@ def download(names, source, staging):
     return staging / ".agents" / "skills"
 
 
-def publish(candidate, target, state, record, state_file):
+def publish(candidate, target, state, record, state_file, expected_link=None):
     """Replace one skill and its baseline together; roll back on ordinary errors."""
     with tempfile.TemporaryDirectory(prefix=".rig-", dir=target.parent) as work:
         work = Path(work)
         incoming, backup = work / "new", work / "old"
         shutil.copytree(candidate, incoming)
         old_record = state["skills"].get(target.name)
-        had_target = target.exists()
-        if target.is_symlink() or (
+        had_target = target.exists() or linked(target)
+        migrating = (
+            expected_link is not None
+            and target.is_symlink()
+            and target.resolve() == expected_link.resolve()
+        )
+        if (linked(target) and not migrating) or (
             had_target
+            and not migrating
             and (old_record is None or digest(target) != old_record["digest"])
         ):
             raise ValueError("installation changed during download; preserved")
@@ -162,88 +168,186 @@ def publish(candidate, target, state, record, state_file):
             else:
                 state["skills"][target.name] = old_record
             raise
+        if migrating:
+            backup.unlink()
 
 
 def reconcile_claude(args, selected, root, results, failures):
     destination = args.home / ".claude" / "skills"
-    state_file = args.home / ".local" / "state" / "rig" / "claude-links.json"
-    state = read_json(state_file) or {"version": 1, "links": []}
-    if (
-        state.get("version") != 1
-        or not isinstance(state.get("links"), list)
-        or any(not valid_name(name) for name in state["links"])
+    state_dir = args.home / ".local" / "state" / "rig"
+    state_file = state_dir / "claude-skills.json"
+    state = read_json(state_file) or {"version": 1, "skills": {}}
+    if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
+        raise ValueError(f"invalid Claude skill state: {state_file}")
+    records = state["skills"]
+    if any(
+        not valid_name(name)
+        or not isinstance(record, dict)
+        or not isinstance(record.get("source"), str)
+        or not isinstance(record.get("digest"), str)
+        for name, record in records.items()
     ):
-        raise ValueError(f"invalid Claude link state: {state_file}")
-    owned = set(state["links"])
-
-    def save():
-        state["links"] = sorted(owned)
-        save_json(state_file, state)
+        raise ValueError(f"invalid ownership entries: {state_file}")
+    link_file = state_dir / "claude-links.json"
+    legacy = read_json(link_file) or {"version": 1, "links": []}
+    if (
+        legacy.get("version") != 1
+        or not isinstance(legacy.get("links"), list)
+        or any(not valid_name(name) for name in legacy["links"])
+    ):
+        raise ValueError(f"invalid Claude link state: {link_file}")
 
     def matches(link, source):
         return link.is_symlink() and link.resolve() == source.resolve()
 
-    if destination.exists() and linked(destination):
-        raise ValueError(f"linked Claude skills root; inspect {destination}")
+    if linked(destination) or (
+        destination.exists() and any(destination.glob(".rig-*"))
+    ):
+        raise ValueError(
+            f"linked Claude skills root or interrupted operation; inspect {destination}"
+        )
     for name in sorted(selected):
         source, target = root / name, destination / name
         try:
-            if matches(target, source):
-                results.append(f"CLAUDE OK {name}")
-            elif target.exists() or linked(target):
-                raise ValueError("existing entry preserved")
-            elif args.dry_run:
-                results.append(f"CLAUDE WOULD LINK {name} (if installed)")
-            elif name in failures:
+            migrating = matches(target, source)
+            previous = records.get(name)
+            current = (
+                None
+                if migrating or not target.exists() and not linked(target)
+                else digest(target)
+            )
+            if previous and current is not None and current != previous["digest"]:
+                raise ValueError("local edits detected; preserved")
+            if name in failures:
                 raise ValueError("shared skill reconciliation failed")
-            elif not (source / "SKILL.md").is_file():
-                raise ValueError("shared skill is unavailable")
-            else:
-                destination.mkdir(parents=True, exist_ok=True)
-                target.symlink_to(
-                    os.path.relpath(source, destination), target_is_directory=True
+            if current is not None and not previous and not args.adopt_existing:
+                raise ValueError(
+                    "unmanaged installation; matching content and --adopt-existing required"
                 )
-                try:
-                    owned.add(name)
-                    save()
-                except BaseException:
-                    target.unlink()
-                    raise
-                results.append(f"CLAUDE LINKED {name}")
+            if (
+                previous
+                and previous["source"] != selected[name]["source"]
+                and not args.adopt_existing
+            ):
+                raise ValueError("source changed; resolve ownership before replacing")
+            candidate = selected[name].get("local") if args.dry_run else None
+            candidate = candidate if candidate is not None else source
+            if args.dry_run and not (candidate / "SKILL.md").is_file():
+                action = (
+                    "MIGRATE"
+                    if migrating
+                    else "INSTALL"
+                    if current is None
+                    else "UPDATE"
+                    if previous
+                    else "ADOPT"
+                )
+                condition = (
+                    "if downloaded contents match"
+                    if action == "ADOPT"
+                    else "if shared install succeeds"
+                )
+                results.append(f"CLAUDE WOULD {action} {name} ({condition})")
+                continue
+            wanted = digest(candidate)
+            record = {"source": selected[name]["source"], "digest": wanted}
+            if (
+                previous
+                and previous["source"] != record["source"]
+                and not (args.adopt_existing and current == wanted)
+            ):
+                raise ValueError("source changed; resolve ownership before replacing")
+            if current is not None and not previous:
+                if not (args.adopt_existing and current == wanted):
+                    raise ValueError(
+                        "unmanaged installation; matching content and --adopt-existing required"
+                    )
+                if not args.dry_run:
+                    records[name] = record
+                    save_json(state_file, state)
+                results.append(
+                    f"CLAUDE {'WOULD ADOPT' if args.dry_run else 'ADOPTED'} {name}"
+                )
+                continue
+            if current == wanted and previous:
+                if previous != record and not args.dry_run:
+                    records[name] = record
+                    save_json(state_file, state)
+                results.append(f"CLAUDE OK {name}")
+                continue
+            action = (
+                "MIGRATE" if migrating else "INSTALL" if current is None else "UPDATE"
+            )
+            if args.dry_run:
+                results.append(f"CLAUDE WOULD {action} {name}")
+                continue
+            destination.mkdir(parents=True, exist_ok=True)
+            publish(
+                source,
+                target,
+                state,
+                record,
+                state_file,
+                expected_link=source if migrating else None,
+            )
+            completed = {
+                "MIGRATE": "MIGRATED",
+                "INSTALL": "INSTALLED",
+                "UPDATE": "UPDATED",
+            }
+            results.append(f"CLAUDE {completed[action]} {name}")
         except (OSError, ValueError) as error:
             failures.append(name)
             results.append(f"CLAUDE ERROR {name}: {error}")
 
-    for name in sorted(owned - set(selected)):
+    for name in sorted((set(records) | set(legacy["links"])) - set(selected)):
         target = destination / name
-        if not target.exists() and not linked(target):
-            if not args.dry_run:
-                owned.remove(name)
-                save()
-            continue
-        if not matches(target, root / name):
-            failures.append(name)
-            results.append(f"CLAUDE ERROR {name}: changed link preserved")
-            continue
-        confirmed = (
-            not args.dry_run
-            and sys.stdin.isatty()
-            and input(f"Remove managed Claude link {name}? [y/N] ").strip().lower()
-            == "y"
-        )
-        if confirmed:
-            if not matches(target, root / name):
-                failures.append(name)
-                results.append(f"CLAUDE ERROR {name}: changed link preserved")
+        try:
+            if not target.exists() and not linked(target):
+                if not args.dry_run:
+                    records.pop(name, None)
+                    save_json(state_file, state)
                 continue
-            target.unlink()
-            owned.remove(name)
-            save()
+            old_link = name in legacy["links"] and matches(target, root / name)
+            if not old_link and (
+                name not in records or digest(target) != records[name]["digest"]
+            ):
+                raise ValueError("local changes detected; removal preserved")
+            confirmed = (
+                not args.dry_run
+                and sys.stdin.isatty()
+                and input(f"⚠️ Remove managed Claude skill {name}? [y/N] ")
+                .strip()
+                .lower()
+                == "y"
+            )
+            if not confirmed:
+                results.append(f"CLAUDE REMOVE pending: {name}")
+                if not args.dry_run:
+                    failures.append(name)
+                continue
+            if old_link:
+                if not matches(target, root / name):
+                    raise ValueError("changed during confirmation; preserved")
+                target.unlink()
+            else:
+                if digest(target) != records[name]["digest"]:
+                    raise ValueError("changed during confirmation; preserved")
+                shutil.rmtree(target)
+            records.pop(name, None)
+            save_json(state_file, state)
             results.append(f"CLAUDE REMOVED {name}")
-        else:
-            results.append(f"CLAUDE REMOVE pending: {name}")
-            if not args.dry_run:
-                failures.append(name)
+        except (OSError, ValueError) as error:
+            failures.append(name)
+            results.append(f"CLAUDE ERROR {name}: {error}")
+    if not args.dry_run and link_file.exists():
+        # Retain ownership only for old links still awaiting migration or removal.
+        legacy["links"] = [
+            name
+            for name in legacy["links"]
+            if name not in records and (destination / name).is_symlink()
+        ]
+        save_json(link_file, legacy)
 
 
 def reconcile(args):
@@ -347,10 +451,6 @@ def reconcile(args):
             with tempfile.TemporaryDirectory(prefix="rig-fetch-") as staging:
                 downloaded = None
                 if items[0][1] is None:
-                    print(
-                        f"Checking {source.removeprefix('remote:')} ({len(items)} skills)…",
-                        flush=True,
-                    )
                     downloaded = download(
                         [name for name, _, _ in items],
                         source.removeprefix("remote:"),
@@ -403,11 +503,11 @@ def reconcile(args):
             report_error(name, error)
     if removals:
         if not args.dry_run and sys.stdin.isatty():
-            print("\nRemove managed skills: " + ", ".join(removals), flush=True)
+            print("\n⚠️ Remove managed skills: " + ", ".join(removals), flush=True)
         confirmed = (
             not args.dry_run
             and sys.stdin.isatty()
-            and input("Remove these managed skills? [y/N] ").strip().lower() == "y"
+            and input("⚠️ Remove these managed skills? [y/N] ").strip().lower() == "y"
         )
         if confirmed:
             for name in removals:
@@ -427,23 +527,23 @@ def reconcile(args):
             if not args.dry_run:
                 failures.extend(removals)
     reconcile_claude(args, selected, root, results, failures)
-    if root.exists():
-        unlisted = sorted(
-            p.name
-            for p in root.iterdir()
-            if not p.name.startswith(".")
-            and p.name not in selected
-            and p.name not in records
-        )
-        if unlisted:
-            results.append("ℹ️ UNLISTED (untouched): " + ", ".join(unlisted))
-    print("\n📋 Skill results" + (" (dry run)" if args.dry_run else ""))
-    for result in results:
-        print(result)
-    status = "⚠️" if failures else "✅"
+    incomplete = len(set(failures))
+    action = f"{args.command} plan" if args.dry_run else args.command
+    status = "⚠️" if incomplete else "📋" if args.dry_run else "✅"
     print(
-        f"{status} Skills: {len(selected)} selected; {len(set(failures))} incomplete."
+        f"{status} Skills {action}: {len(selected)} selected across .agents and .claude; "
+        f"{incomplete} incomplete."
     )
+    for result in results:
+        # Keep diagnostics and pending decisions visible. Dry runs also show plans.
+        if result.startswith(("❌ ERROR ", "  ")):
+            print(result)
+        elif result.startswith("CLAUDE ERROR "):
+            print(f"❌ {result}")
+        elif result.startswith(("REMOVE pending:", "CLAUDE REMOVE pending:")):
+            print(f"⚠️ {result}")
+        elif args.dry_run and result.startswith(("WOULD ", "CLAUDE WOULD ")):
+            print(f"📋 {result}")
     return int(bool(failures))
 
 
@@ -480,12 +580,12 @@ def main():
             lock.unlink()
     except FileExistsError:
         print(
-            f"Another sync or stale lock exists: {lock}. Inspect before removing it.",
+            f"⚠️ Another sync or stale lock exists: {lock}. Inspect before removing it.",
             file=sys.stderr,
         )
         return 1
     except (ValueError, OSError, KeyError, TypeError, EOFError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
+        print(f"❌ ERROR: {error}", file=sys.stderr)
         return 1
 
 
