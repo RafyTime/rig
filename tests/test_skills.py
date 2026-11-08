@@ -88,17 +88,19 @@ class SkillsTest(unittest.TestCase):
         self.assertEqual(result, 0)
         download.assert_called_once()
 
-    def test_claude_links_preserve_existing_entries_and_track_owned_removal(self):
+    def test_claude_copies_preserve_existing_entries_and_track_owned_removal(self):
         claude = self.home / ".claude/skills"
         self.write_skill(claude / "other")
         self.assertEqual(self.run_sync()[0], 0)
         link = claude / "one"
-        self.assertTrue(link.is_symlink())
-        self.assertEqual(link.resolve(), (self.root / "one").resolve())
+        self.assertTrue(link.is_dir())
+        self.assertFalse(link.is_symlink())
+        self.assertEqual(skills.digest(link), skills.digest(self.root / "one"))
         self.set_manifest()
         with patch("sys.stdin.isatty", return_value=False):
             self.assertEqual(self.run_sync()[0], 1)
-        self.assertTrue(link.is_symlink())
+        self.assertTrue(link.is_dir())
+        self.assertFalse(link.is_symlink())
         with (
             patch("sys.stdin.isatty", return_value=True),
             patch("builtins.input", return_value="y"),
@@ -107,7 +109,7 @@ class SkillsTest(unittest.TestCase):
         self.assertFalse(link.is_symlink())
         self.assertTrue((claude / "other/SKILL.md").exists())
 
-    def test_claude_conflict_and_existing_link_are_never_adopted(self):
+    def test_claude_conflict_is_preserved_and_expected_link_migrates(self):
         claude = self.home / ".claude/skills"
         self.write_skill(claude / "one", "independent")
         self.assertEqual(self.run_sync()[0], 1)
@@ -117,13 +119,17 @@ class SkillsTest(unittest.TestCase):
         shutil.rmtree(claude / "one")
         (claude / "one").symlink_to(self.root / "one", target_is_directory=True)
         self.assertEqual(self.run_sync()[0], 0)
+        self.assertFalse((claude / "one").is_symlink())
+        self.assertEqual(
+            skills.digest(claude / "one"), skills.digest(self.root / "one")
+        )
         self.set_manifest()
         with (
             patch("sys.stdin.isatty", return_value=True),
             patch("builtins.input", return_value="y"),
         ):
             self.assertEqual(self.run_sync()[0], 0)
-        self.assertTrue((claude / "one").is_symlink())
+        self.assertFalse((claude / "one").exists())
 
     def test_update_refreshes_selected_only_and_preserves_unlisted(self):
         self.run_sync()
@@ -137,8 +143,43 @@ class SkillsTest(unittest.TestCase):
         result, output, download = self.run_sync(newer, command="update")
         self.assertEqual(result, 0)
         self.assertEqual((self.root / "one/SKILL.md").read_text(), "newer")
+        self.assertEqual(
+            (self.home / ".claude/skills/one/SKILL.md").read_text(), "newer"
+        )
         download.assert_called_once()
         self.assertIn("UNLISTED (untouched): unlisted", output)
+
+    def test_claude_local_edits_survive_shared_update(self):
+        self.run_sync()
+        target = self.home / ".claude/skills/one/SKILL.md"
+        target.write_text("my changes")
+
+        def newer(names, source, stage):
+            for name in names:
+                self.write_skill(stage / name, "newer")
+            return stage
+
+        self.assertEqual(self.run_sync(newer, command="update")[0], 1)
+        self.assertEqual(target.read_text(), "my changes")
+        self.assertEqual((self.root / "one/SKILL.md").read_text(), "newer")
+
+    def test_claude_migration_rolls_back_if_state_write_fails(self):
+        source = self.write_skill(self.root / "one")
+        target = self.home / ".claude/skills/one"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(source, target_is_directory=True)
+        results, failures = [], []
+        with patch.object(skills, "save_json", side_effect=OSError("disk full")):
+            skills.reconcile_claude(
+                self.args,
+                {"one": {"source": "remote:owner/pack"}},
+                self.root,
+                results,
+                failures,
+            )
+        self.assertEqual(failures, ["one"])
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(target.resolve(), source.resolve())
 
     def test_downloads_once_per_source_with_only_requested_names(self):
         self.set_manifest({"owner/pack": ["one", "two"], "other/pack": ["three"]})
