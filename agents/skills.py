@@ -220,12 +220,34 @@ def reconcile_claude(args, selected, root, results, failures):
                 raise ValueError("local edits detected; preserved")
             if name in failures:
                 raise ValueError("shared skill reconciliation failed")
+            if current is not None and not previous and not args.adopt_existing:
+                raise ValueError(
+                    "unmanaged installation; matching content and --adopt-existing required"
+                )
+            if (
+                previous
+                and previous["source"] != selected[name]["source"]
+                and not args.adopt_existing
+            ):
+                raise ValueError("source changed; resolve ownership before replacing")
             candidate = selected[name].get("local") if args.dry_run else None
             candidate = candidate if candidate is not None else source
             if args.dry_run and not (candidate / "SKILL.md").is_file():
-                results.append(
-                    f"CLAUDE WOULD INSTALL {name} (if shared install succeeds)"
+                action = (
+                    "MIGRATE"
+                    if migrating
+                    else "INSTALL"
+                    if current is None
+                    else "UPDATE"
+                    if previous
+                    else "ADOPT"
                 )
+                condition = (
+                    "if downloaded contents match"
+                    if action == "ADOPT"
+                    else "if shared install succeeds"
+                )
+                results.append(f"CLAUDE WOULD {action} {name} ({condition})")
                 continue
             wanted = digest(candidate)
             record = {"source": selected[name]["source"], "digest": wanted}

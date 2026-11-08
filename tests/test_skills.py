@@ -335,6 +335,16 @@ class SkillsTest(unittest.TestCase):
             (self.home / ".claude/skills/mine/SKILL.md").read_text(), "original"
         )
 
+    def test_missing_shared_preview_reports_unmanaged_claude_conflict(self):
+        target = self.write_skill(self.home / ".claude/skills/one", "independent")
+        result, output, download = self.run_sync(dry_run=True)
+        self.assertEqual(result, 1)
+        self.assertIn("❌ CLAUDE ERROR one: unmanaged installation", output)
+        self.assertNotIn("CLAUDE WOULD INSTALL one", output)
+        download.assert_not_called()
+        self.assertEqual((target / "SKILL.md").read_text(), "independent")
+        self.assertFalse(self.root.exists())
+
     def test_owned_download_can_be_explicitly_forked_to_identical_custom_source(self):
         self.run_sync()
         custom = self.write_skill(self.repo / "custom/one")
