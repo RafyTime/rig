@@ -320,6 +320,21 @@ class SkillsTest(unittest.TestCase):
         self.assertTrue((self.root / "one/SKILL.md").is_file())
         self.assertTrue((self.root / "two/SKILL.md").is_file())
 
+    def test_custom_update_preview_includes_claude_without_writing(self):
+        custom = self.write_skill(self.repo / "custom/mine")
+        self.set_manifest({"./custom": ["mine"]})
+        self.assertEqual(self.run_sync()[0], 0)
+        (custom / "SKILL.md").write_text("new custom contents")
+        result, output, download = self.run_sync(dry_run=True)
+        self.assertEqual(result, 0)
+        self.assertIn("📋 WOULD UPDATE mine", output)
+        self.assertIn("📋 CLAUDE WOULD UPDATE mine", output)
+        download.assert_not_called()
+        self.assertEqual((self.root / "mine/SKILL.md").read_text(), "original")
+        self.assertEqual(
+            (self.home / ".claude/skills/mine/SKILL.md").read_text(), "original"
+        )
+
     def test_owned_download_can_be_explicitly_forked_to_identical_custom_source(self):
         self.run_sync()
         custom = self.write_skill(self.repo / "custom/one")

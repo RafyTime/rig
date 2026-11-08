@@ -220,12 +220,14 @@ def reconcile_claude(args, selected, root, results, failures):
                 raise ValueError("local edits detected; preserved")
             if name in failures:
                 raise ValueError("shared skill reconciliation failed")
-            if args.dry_run and not (source / "SKILL.md").is_file():
+            candidate = selected[name].get("local") if args.dry_run else None
+            candidate = candidate if candidate is not None else source
+            if args.dry_run and not (candidate / "SKILL.md").is_file():
                 results.append(
                     f"CLAUDE WOULD INSTALL {name} (if shared install succeeds)"
                 )
                 continue
-            wanted = digest(source)
+            wanted = digest(candidate)
             record = {"source": selected[name]["source"], "digest": wanted}
             if (
                 previous
