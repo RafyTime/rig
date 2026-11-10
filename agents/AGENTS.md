@@ -16,6 +16,7 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Name branches after their purpose, using prefixes (feat/, fix/, refactor/, docs/, chore/...) followed by a short kebab-case description. Do not use agent names as prefixes (no "codex/feature-slug...").
 - Never force-push, rewrite shared history, or push directly to the default branch without explicit approval.
 - Run checks proportionate to the change. For prose-only edits, review the diff & format; for behavior changes, run relevant checks before committing.
+- Do not credit or advertice, add agent attribution or branding to commits, pull requests, code, or documentation unless I explicitly ask. This includes co-author trailers and "generated with" notices. Use the configured Git identity and preserve existing human attribution.
 
 ## Coding Preferences
 
