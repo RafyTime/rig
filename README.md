@@ -177,6 +177,12 @@ criterion scores. It offers a handoff or implementation after diagnosis.
 Its `agents/openai.yaml` disables implicit invocation in Codex; its frontmatter
 does the same in Cursor, where it is invoked as `/pwa-audit`.
 
+`whats-next` is a custom, manually invoked extension of the engineering skill
+flow. Use `$whats-next` in Codex or `/whats-next` in Claude/Cursor to choose
+tracked work, preview short prompts and settings, and approve separate agent
+threads. Assessment also works without thread-launch tools. It routes to existing
+skills without changing their workflows.
+
 ### Preservation and reporting
 
 - Preserve conflicting local edits and source/name collisions; report them.
