@@ -20,9 +20,9 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 
 ## Pull requests
 
-- Follow the repo's PR title and body conventions where defined. Otherwise, use a Gitmoji, an optional scope in parentheses, and a short plain-language title. In the body, summarize the problem, fix, and evidence.
+- Follow the repo's PR title and body conventions where defined. Otherwise, use a Gitmoji, an optional scope in parentheses, and a short plain-language title.
 - Include before-and-after evidence in the PR. Rerun the same reproduction for bugs, use screenshots for visual changes, and record motion or timing. For performance changes, report base and branch measurements under the same workload. State what you couldn't verify.
-- Watch PRs you open until the latest pushed commit is mergeable or you need my input. Address CI failures and actionable review feedback. After pushing a fix, reply in the review thread with what changed and the commit, then resolve it. Leave threads that need a decision open.
+- Watch PRs you open until the latest pushed commit is mergeable or you need my input. Address CI failures and actionable code review feedback. After pushing a fix, reply in the review thread with what changed and the commit, then resolve it. Leave threads that need a decision open.
 
 ## Coding Preferences
 
