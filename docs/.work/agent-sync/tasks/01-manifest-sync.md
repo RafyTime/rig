@@ -14,4 +14,7 @@ Implemented `agents/skills.py`, `agents/skills.json`, and chezmoi after-scripts.
 Removed vendored snapshots and legacy restore inputs without deleting installed
 skills. The real CLI staging check, isolated chezmoi integration, and live sync
 passed. Restored `ask-matt`; adopted other selected installations unchanged.
-Native Windows execution remains a documented device check.
+Native Windows verification passed in a temporary chezmoi destination with a
+process-scoped `RemoteSigned` policy. The hook installed and refreshed a test
+skill, preserved a local edit, and returned a failure on conflict. The hook
+sets Python's output encoding to UTF-8 so status messages work when captured.

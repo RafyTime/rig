@@ -15,10 +15,10 @@ chezmoi wrapper around Vercel's skills CLI. The root
   previously installed files were verified unchanged.
 - Apply restores missing skills and refreshes custom skills. Downloaded updates
   and Git publication remain explicit.
+- Verified the PowerShell hook on native Windows with an isolated chezmoi apply.
 - Earlier standalone-tool and snapshot decisions are superseded by the README.
 
 ## Fog
 
 - Classify installed skills without upstream metadata.
-- Test the generated PowerShell hook on an actual native Windows device.
 - Future Claude destination support remains deferred.

@@ -52,9 +52,12 @@ chat after applying. If selected skills already exist on that device, first use 
 
 Chezmoi runs `agents/skills.py sync` after applying configuration, on every
 apply. The Python wrapper runs through **uv** and downloads through **Bun**.
-Fedora execution is tested; the Windows PowerShell hook still needs testing on
-an actual Windows device. Downloads use `skills@latest`; ordinary sync still
-leaves installed downloaded versions unchanged.
+The after-script has been tested in isolated homes on Fedora and native Windows.
+On Windows, PowerShell must allow locally generated scripts. If the default
+policy blocks the hook, run `Set-ExecutionPolicy -Scope Process RemoteSigned`
+in the PowerShell session before running `chezmoi apply`. This setting expires
+when that session closes. Downloads use `skills@latest`. Ordinary sync leaves
+installed downloaded versions unchanged.
 
 `agents/skills.json` is the selection manifest. For example:
 
@@ -233,5 +236,6 @@ git diff --check
 ```
 
 Tests use temporary homes and mocked downloads, plus an actual chezmoi apply
-integration when chezmoi and uv are installed. Network installs and native Windows
-execution are separate integration checks.
+integration when chezmoi and uv are installed. On Windows, the integration test
+uses the same PowerShell policy as `chezmoi apply`. Network installs are a
+separate integration check.
