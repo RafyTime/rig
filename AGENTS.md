@@ -1,13 +1,13 @@
-# [AGENTS.md](http://AGENTS.md)
+# RIG
 
 ## Issue tracker
 
-Local Markdown issues live in `docs/.work/<feature>/tasks/`.
+Specs and tickets live in GitHub Issues for `RafyTime/rig`.
 See `docs/agents/issue-tracker.md`.
 
 ## Triage labels
 
-Use the five default triage roles.
+Use the five default GitHub triage labels.
 See `docs/agents/triage-labels.md`.
 
 ## Domain docs

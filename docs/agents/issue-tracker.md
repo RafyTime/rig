@@ -1,27 +1,27 @@
 # Issue tracker
 
-Issues and specs live as Markdown files under `docs/.work/`.
+Specs and tickets live in GitHub Issues for `RafyTime/rig`. Use `gh`
+from the repository checkout. `docs/.work/` contains historical records.
 
-- One directory per feature: `docs/.work/<feature>/`.
-- Specs: `docs/.work/<feature>/spec.md`.
-- Individual tickets: `docs/.work/<feature>/tasks/NN-<slug>.md`,
-  numbered from 01.
-- Record triage state in a `Status:` line near the top.
-  Use the roles in `triage-labels.md`.
-- Append discussion under a `## Comments` heading.
+- Create issues with `gh issue create`. Pass multiline bodies with `--body-file`.
+- Read issues with `gh issue view <number> --comments`.
+- Find work with `gh issue list --state open` and the relevant label filters.
+- Comment, apply labels, and close with `gh issue comment`, `gh issue edit`,
+  and `gh issue close`.
 
-When publishing a ticket, create its individual file.
-When fetching a ticket, read the referenced file.
+**PRs as a request surface: no.**
 
 ## Wayfinding
 
-- Map: `docs/.work/<feature>/map.md`, with Notes,
-  Decisions-so-far, and Fog sections.
-- Child tickets use the same `tasks/NN-<slug>.md` convention.
-- Record ticket type in `Type:`: research, prototype,
-  grilling, or task.
-- Record dependencies in `Blocked by: NN, NN`.
-- Choose the lowest-numbered open, unblocked, unclaimed ticket.
-- Set `Status: claimed` before starting work.
-- To resolve, append an `## Answer`, set `Status: resolved`,
-  and add a summary and link to the map's Decisions-so-far.
+- Create the map as an issue labelled `wayfinder:map`. Keep its Notes,
+  Decisions-so-far, and Fog in the issue body. Create the label when first needed.
+- Create tickets with `gh issue create --parent <map>` or attach existing
+  tickets with `gh issue edit <map> --add-sub-issue <ticket>`. Use the
+  `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or
+  `wayfinder:task` label. Create these labels when first needed.
+- Record blockers as native GitHub issue dependencies. If unavailable,
+  add `Blocked by: #<number>` to the ticket.
+- Select the first open, unassigned child in map order whose blockers
+  are closed. Claim it with `gh issue edit <ticket> --add-assignee @me`.
+- Resolve by posting the answer, closing the ticket, and linking the
+  decision from the parent map.
