@@ -18,7 +18,7 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Run checks proportionate to the change. For prose-only edits, review the diff & format; for behavior changes, run relevant checks before committing.
 - Do not credit or advertice, add agent attribution or branding to commits, pull requests, code, or documentation unless I explicitly ask. This includes co-author trailers and "generated with" notices. Use the configured Git identity and preserve existing human attribution.
 
-## Pull requests
+## Pull Requests
 
 - Follow the repo's PR title and body conventions where defined. Otherwise, use a Gitmoji, an optional scope in parentheses, and a short plain-language title.
 - Include before-and-after evidence in the PR. Rerun the same reproduction for bugs, use screenshots for visual changes, and record motion or timing. For performance changes, report base and branch measurements under the same workload. State what you couldn't verify.
