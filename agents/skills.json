@@ -5,6 +5,7 @@
       "source": "./agents/skills",
       "skills": [
         "pwa-audit",
+        "repo-review",
         "unslop",
         "whats-next"
       ]
