@@ -1,23 +1,33 @@
 # Rig
 
-Personal configuration shared across Fedora and native Windows using
-[chezmoi](https://www.chezmoi.io/). Start here when working on this repo or
-setting up another device.
+Rig keeps my personal configuration, agent setup, and skills in sync across
+my machines with [chezmoi](https://www.chezmoi.io/). The current setup
+supports Fedora and native Windows.
 
-## Current setup
+[Set up another device](#another-device) · [Daily workflow](#daily-workflow) ·
+[Repository layout](#repository-layout) · [Manage skills](#skills)
 
-- `.chezmoiroot` selects `home/` as the managed source. Other repo files are not
-  deployed directly.
-- `agents/AGENTS.md` is the canonical personal instructions file. Templates
-  render followers at `~/.agents/AGENTS.md`, `~/.codex/AGENTS.md`, and
-  `~/.cursor/rules/personal.mdc` (always applied), and `~/.claude/CLAUDE.md`.
-- Codex and Cursor share global skills in `~/.agents/skills/`.
-- `zed/` contains reference settings, not yet managed by chezmoi.
+## Another device
 
-The current Fedora machine's local chezmoi config sets
-`sourceDir = "/home/lplata/Code/rig"`. Device-specific paths belong in local
-configuration. The Codex template currently assumes default `~/.codex`;
-custom `CODEX_HOME` support is not implemented.
+Install chezmoi, Git, uv, and Bun, then authenticate with GitHub.
+
+```sh
+chezmoi init <rig-clone-url>
+```
+
+If this device already has selected skills installed, follow
+[Adopt existing skills](#adopt-existing-skills) before the first apply.
+On Windows, see [PowerShell execution policy](#powershell-execution-policy)
+if the skill sync hook is blocked.
+
+```sh
+chezmoi diff
+chezmoi apply
+```
+
+Run `chezmoi source-path` and check that it points to the `home/` directory
+inside the Rig checkout. If you use Cursor, open a fresh chat and verify that
+it loads the personal rule.
 
 ## Daily workflow
 
@@ -34,30 +44,29 @@ On another device, `chezmoi update` pulls and applies. To preview first, use
 Automatic commits, pushes, and background sync are disabled. Agents must not
 commit or push unless explicitly requested.
 
-## Another device
+## Repository layout
 
-Install chezmoi, Git, uv, and Bun; authenticate with the Git host, then:
+| Path | Role |
+| --- | --- |
+| [`home/`](home/) | Files managed by chezmoi, selected by `.chezmoiroot`. |
+| [`agents/AGENTS.md`](agents/AGENTS.md) | Canonical personal instructions for agents. |
+| [`agents/skills.json`](agents/skills.json) | Selects downloaded and custom skills. |
+| [`agents/skills/`](agents/skills/) | Source for custom skills. |
+| [`zed/`](zed/) | Reference settings for Zed. |
 
-```sh
-chezmoi init <rig-clone-url>
-chezmoi diff
-chezmoi apply
-```
-
-`chezmoi source-path` shows the effective `home/` source directory. Clone
-locations may differ between devices. Verify Cursor's personal rule in a fresh
-chat after applying. If selected skills already exist on that device, first use the adoption command below.
+Templates render the personal instructions at `~/.agents/AGENTS.md`,
+`~/.codex/AGENTS.md`, `~/.cursor/rules/personal.mdc` (always applied), and
+`~/.claude/CLAUDE.md`. The Codex template assumes the default `~/.codex`.
+Keep checkout paths in local configuration. For example, the current Fedora
+machine sets `sourceDir = "/home/lplata/Code/rig"`.
 
 ## Skills
 
-Chezmoi runs `agents/skills.py sync` after applying configuration, on every
-apply. The Python wrapper runs through **uv** and downloads through **Bun**.
-The after-script has been tested in isolated homes on Fedora and native Windows.
-On Windows, PowerShell must allow locally generated scripts. If the default
-policy blocks the hook, run `Set-ExecutionPolicy -Scope Process RemoteSigned`
-in the PowerShell session before running `chezmoi apply`. This setting expires
-when that session closes. Downloads use `skills@latest`. Ordinary sync leaves
-installed downloaded versions unchanged.
+On each apply, chezmoi runs `agents/skills.py sync` through uv. Sync refreshes
+custom skills and uses Bun with `skills@latest` to fetch missing downloaded
+skills. Use an explicit update to refresh installed downloaded skills.
+
+### Select and update skills
 
 `agents/skills.json` is the selection manifest. For example:
 
@@ -71,9 +80,10 @@ installed downloaded versions unchanged.
 }
 ```
 
-Sources beginning with `./` are local skill containers relative to rig. Each
-selected name maps to `<source>/<name>/SKILL.md`. Other sources are downloaded
-through the CLI. Local sources refresh on apply; remote updates remain explicit.
+Sources beginning with `./` are local skill containers relative to the Rig
+checkout. Each selected name maps to `<source>/<name>/SKILL.md`. Add shared
+skills to the manifest. Direct CLI installs stay local until selected.
+
 From the repo root:
 
 ```sh
@@ -82,7 +92,10 @@ uv run update-skills.py                       # Explicitly refresh selected skil
 uv run update-skills.py --dry-run             # Plan an update without downloading
 ```
 
-On an existing device, adopt matching CLI-managed installations once:
+### Adopt existing skills
+
+On an existing device, run these commands once from the Rig checkout root to
+adopt matching CLI-managed installations:
 
 ```sh
 uv run --script agents/skills.py sync --adopt-existing --dry-run
@@ -92,29 +105,12 @@ uv run --script agents/skills.py sync --adopt-existing
 Adoption trusts current installed contents as the baseline when the existing
 CLI lock identifies the selected source; it cannot establish whether those
 contents were modified before adoption. Unknown-origin collisions are preserved.
-After adoption, use the wrapper's update command rather than the global CLI
-updater, which does not share the wrapper's ownership state. Downloads use the
-CLI's project scope in a temporary directory before publishing global files;
-the CLI's global lock file is no longer the shared inventory.
+Use `update-skills.py` for later updates. Rig tracks ownership separately
+from the global skills CLI.
 
-Downloads are batched by source, with one CLI call per downloaded source during
-an update. Each requested skill is verified independently, and
-unchanged contents are kept without replacing installed files. Missing selections
-are reported individually; a failed CLI call preserves all installations from
-that source while other sources continue. Apply and explicit skill updates print
-one summary line, followed only by errors, failure diagnostics, and pending
-removals. Successful per-skill results and unlisted skills are omitted. Dry runs
-also list planned changes so they can be reviewed before applying.
+### Sync behavior
 
-
-- One manifest selects sources and names for downloaded and custom skills.
-  Add shared skills there; direct CLI installs remain local until selected.
-- Downloaded contents stay upstream, outside rig. Custom skill sources live in
-  rig and use the same selection and installation workflow.
-- Reconcile on every apply: install missing selections and refresh custom
-  skills from rig. Leave existing downloaded versions unchanged.
-- A separate explicit command updates only selected downloaded skills.
-  `chezmoi update` means pull rig and apply, not refresh upstream skills.
+- `chezmoi update` pulls Rig and applies the configuration.
 - Missing downloads fetch current upstream content. Exact version parity and
   revision pinning are deferred. New upstream skills require explicit selection.
 - Maintain ordinary copies of selected skills in both `~/.agents/skills/` and
@@ -125,6 +121,11 @@ also list planned changes so they can be reviewed before applying.
   ordinary copies automatically. Preserve other links and unmanaged directories.
   Identical unmanaged Claude copies can be adopted with `--adopt-existing`.
   Removed managed copies require confirmation in each destination.
+
+Rig downloads through a temporary CLI project and batches requests by source.
+It verifies each selected skill independently and keeps unchanged copies in
+place. Apply and explicit updates print a summary, errors, and pending
+removals. Dry runs also list planned changes.
 
 ### Custom skills and forks
 
@@ -180,6 +181,10 @@ criterion scores. It offers a handoff or implementation after diagnosis.
 Its `agents/openai.yaml` disables implicit invocation in Codex; its frontmatter
 does the same in Cursor, where it is invoked as `/pwa-audit`.
 
+`repo-review` reviews a GitHub repository's presentation, navigation, and
+onboarding. Invoke it with `$repo-review` in Codex or `/repo-review` in
+Claude Code and Cursor to get a read-only report with prioritized fixes.
+
 `whats-next` is a custom, manually invoked extension of the engineering skill
 flow. Use `$whats-next` in Codex or `/whats-next` in Claude/Cursor to choose
 tracked work, preview short prompts and settings, and approve separate agent
@@ -201,7 +206,14 @@ skills without changing their workflows.
 - Already-installed selections should reconcile offline. Missing skills offline
   are visible failures. First-time runtime/CLI bootstrap may need network access.
 
-### State, recovery, and checks
+### PowerShell execution policy
+
+On Windows, PowerShell must allow locally generated scripts. If the default
+policy blocks the skill sync hook, run
+`Set-ExecutionPolicy -Scope Process RemoteSigned` in the PowerShell session
+before running `chezmoi apply`. This setting expires when that session closes.
+
+### State and recovery
 
 Chezmoi diffs will always show the after-script because it runs on every apply.
 Use `chezmoi diff --exclude scripts` or `chezmoi verify --exclude scripts` to
@@ -226,7 +238,9 @@ are preserved. Project skills are not managed yet. Claude copy ownership is stor
 separately in `~/.local/state/rig/claude-skills.json`. The earlier
 `claude-links.json` is retained only to track old links awaiting migration or removal.
 
-Run checks from the repo root:
+## Development checks
+
+Run these commands from the repo root:
 
 ```sh
 uv run python -m unittest discover -s tests -v
