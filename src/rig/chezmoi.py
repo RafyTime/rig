@@ -43,4 +43,4 @@ def run(command: str, *args: str, needs: tuple[Tool, ...] = ()) -> int:
     try:
         return subprocess.run([executable, command, *args], check=False).returncode
     except KeyboardInterrupt:
-        return 130
+        return 130  # Shell convention for an interrupted command.

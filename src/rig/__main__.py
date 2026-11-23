@@ -1,3 +1,3 @@
-from rig.cli import main
+from rig.cli import app
 
-main()
+app(prog_name="rig")

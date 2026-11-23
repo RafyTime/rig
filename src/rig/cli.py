@@ -65,7 +65,3 @@ def diff(context: typer.Context) -> None:
 def apply(context: typer.Context) -> None:
     """Apply dotfiles, then sync skills once through the chezmoi hook."""
     delegate("apply", context.args, needs=("uv",))
-
-
-def main() -> None:
-    app()

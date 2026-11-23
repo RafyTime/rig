@@ -30,11 +30,10 @@ def test_version_names_the_installed_cli():
     assert result.stdout.startswith("rig ")
 
 
-@pytest.mark.parametrize("command", ["diff", "apply"])
-def test_help_lists_dotfile_commands(command: str):
+def test_help_lists_dotfile_commands():
     result = rig("--help")
     assert result.returncode == 0, result.stderr
-    assert command in result.stdout
+    assert "diff" in result.stdout and "apply" in result.stdout
     assert "\x1b[" not in result.stdout
 
 
@@ -96,7 +95,7 @@ def test_missing_dependency_stops_with_plain_recovery_step(
 REPO = Path(__file__).parents[1]
 
 # CI provisions both tools, so a missing one fails there instead of skipping.
-needs_chezmoi = pytest.mark.skipif(
+needs_chezmoi_and_uv = pytest.mark.skipif(
     not (os.environ.get("CI") or (shutil.which("chezmoi") and shutil.which("uv"))),
     reason="chezmoi and uv required",
 )
@@ -104,7 +103,6 @@ needs_chezmoi = pytest.mark.skipif(
 RECORDING_SKILLS_ENGINE = """\
 import json
 import sys
-import tomllib
 from pathlib import Path
 
 with Path(__file__).with_name("sync-calls.log").open("a") as log:
@@ -112,7 +110,7 @@ with Path(__file__).with_name("sync-calls.log").open("a") as log:
 """
 
 
-@needs_chezmoi
+@needs_chezmoi_and_uv
 def test_diff_previews_and_apply_syncs_skills_once_from_outside_checkout(
     tmp_path: Path,
 ):
