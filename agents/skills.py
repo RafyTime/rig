@@ -14,17 +14,57 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any, Literal, TypedDict
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS_CLI = "skills@latest"
+
+
+class Ownership(TypedDict):
+    source: str
+    digest: str
+
+
+class OwnershipState(TypedDict):
+    version: Literal[1]
+    skills: dict[str, Ownership]
+
+
+class LinkState(TypedDict):
+    version: Literal[1]
+    links: list[str]
 
 
 def valid_name(name):
     return isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
 
 
-def read_json(path):
+def version_1(value) -> bool:
+    # JSON true and 1.0 compare equal to 1 but are not schema version 1.
+    return type(value) is int and value == 1
+
+
+def read_json(path: Path) -> Any:
+    # Untrusted JSON; callers validate before narrowing to a typed shape.
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def load_ownership(path: Path, label: str) -> OwnershipState:
+    """Read an ownership state file; a missing or empty file owns nothing."""
+    state = read_json(path)
+    if not state:
+        return {"version": 1, "skills": {}}
+    if not version_1(state.get("version")) or not isinstance(state.get("skills"), dict):
+        raise ValueError(f"invalid {label}: {path}")
+    if any(
+        not valid_name(name)
+        or not isinstance(record, dict)
+        or not isinstance(record.get("source"), str)
+        or not isinstance(record.get("digest"), str)
+        for name, record in state["skills"].items()
+    ):
+        raise ValueError(f"invalid ownership entries: {path}")
+    return state
 
 
 def save_json(path, value):
@@ -58,7 +98,7 @@ def digest(path):
 
 
 def selections(manifest, repo):
-    if not isinstance(manifest, dict) or manifest.get("version") != 1:
+    if not isinstance(manifest, dict) or not version_1(manifest.get("version")):
         raise ValueError("expected manifest version 1")
     if not isinstance(manifest.get("sources"), list) or "custom" in manifest:
         raise TypeError("use one sources list with source and skills entries")
@@ -133,7 +173,14 @@ def download(names, source, staging):
     return staging / ".agents" / "skills"
 
 
-def publish(candidate, target, state, record, state_file, expected_link=None):
+def publish(
+    candidate,
+    target,
+    state: OwnershipState,
+    record: Ownership,
+    state_file,
+    expected_link=None,
+):
     """Replace one skill and its baseline together; roll back on ordinary errors."""
     with tempfile.TemporaryDirectory(prefix=".rig-", dir=target.parent) as work:
         work = Path(work)
@@ -176,22 +223,12 @@ def reconcile_claude(args, selected, root, results, failures):
     destination = args.home / ".claude" / "skills"
     state_dir = args.home / ".local" / "state" / "rig"
     state_file = state_dir / "claude-skills.json"
-    state = read_json(state_file) or {"version": 1, "skills": {}}
-    if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
-        raise ValueError(f"invalid Claude skill state: {state_file}")
+    state = load_ownership(state_file, "Claude skill state")
     records = state["skills"]
-    if any(
-        not valid_name(name)
-        or not isinstance(record, dict)
-        or not isinstance(record.get("source"), str)
-        or not isinstance(record.get("digest"), str)
-        for name, record in records.items()
-    ):
-        raise ValueError(f"invalid ownership entries: {state_file}")
     link_file = state_dir / "claude-links.json"
-    legacy = read_json(link_file) or {"version": 1, "links": []}
+    legacy: LinkState = read_json(link_file) or {"version": 1, "links": []}
     if (
-        legacy.get("version") != 1
+        not version_1(legacy.get("version"))
         or not isinstance(legacy.get("links"), list)
         or any(not valid_name(name) for name in legacy["links"])
     ):
@@ -250,7 +287,7 @@ def reconcile_claude(args, selected, root, results, failures):
                 results.append(f"CLAUDE WOULD {action} {name} ({condition})")
                 continue
             wanted = digest(candidate)
-            record = {"source": selected[name]["source"], "digest": wanted}
+            record: Ownership = {"source": selected[name]["source"], "digest": wanted}
             if (
                 previous
                 and previous["source"] != record["source"]
@@ -354,18 +391,8 @@ def reconcile(args):
     selected = selections(read_json(args.manifest), REPO)
     root = args.home / ".agents" / "skills"
     state_file = args.home / ".local" / "state" / "rig" / "skills.json"
-    state = read_json(state_file) or {"version": 1, "skills": {}}
-    if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
-        raise ValueError(f"invalid local state: {state_file}")
+    state = load_ownership(state_file, "local state")
     records = state["skills"]
-    if any(
-        not valid_name(name)
-        or not isinstance(record, dict)
-        or not isinstance(record.get("source"), str)
-        or not isinstance(record.get("digest"), str)
-        for name, record in records.items()
-    ):
-        raise ValueError(f"invalid ownership entries: {state_file}")
     legacy = read_json(args.home / ".agents" / ".skill-lock.json").get("skills", {})
     failures = []
     results = []
@@ -475,7 +502,7 @@ def reconcile(args):
                             results.append(f"UNCHANGED {name}")
                             continue
                         root.mkdir(parents=True, exist_ok=True)
-                        record = {"source": source, "digest": wanted}
+                        record: Ownership = {"source": source, "digest": wanted}
                         publish(candidate, target, state, record, state_file)
                         results.append(
                             f"{'INSTALLED' if current is None else 'UPDATED'} {name}"

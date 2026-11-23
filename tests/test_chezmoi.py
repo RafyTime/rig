@@ -11,8 +11,10 @@ from pathlib import Path
 REPO = Path(__file__).parents[1]
 
 
+# CI provisions both tools, so a missing one fails there instead of skipping.
 @unittest.skipUnless(
-    shutil.which("chezmoi") and shutil.which("uv"), "chezmoi and uv required"
+    os.environ.get("CI") or (shutil.which("chezmoi") and shutil.which("uv")),
+    "chezmoi and uv required",
 )
 class ChezmoiTest(unittest.TestCase):
     def test_apply_refreshes_custom_skills_and_runs_even_without_manifest_changes(self):
