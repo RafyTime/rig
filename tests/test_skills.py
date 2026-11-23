@@ -433,6 +433,12 @@ class SkillsTest(unittest.TestCase):
                 self.repo,
             )
 
+    def test_state_version_must_be_integer_one(self):
+        for version in (True, 1.0):
+            skills.save_json(self.state_file, {"version": version, "skills": {}})
+            with self.assertRaisesRegex(ValueError, "invalid local state"):
+                self.run_sync()
+
     def test_publish_rolls_back_when_state_write_fails(self):
         self.run_sync()
         before = skills.read_json(self.state_file)

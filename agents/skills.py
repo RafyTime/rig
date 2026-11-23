@@ -39,6 +39,11 @@ def valid_name(name):
     return isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name)
 
 
+def version_1(value) -> bool:
+    # JSON true and 1.0 compare equal to 1 but are not schema version 1.
+    return type(value) is int and value == 1
+
+
 def read_json(path: Path) -> Any:
     # Untrusted JSON; callers validate before narrowing to a typed shape.
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -49,7 +54,7 @@ def load_ownership(path: Path, label: str) -> OwnershipState:
     state = read_json(path)
     if not state:
         return {"version": 1, "skills": {}}
-    if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
+    if not version_1(state.get("version")) or not isinstance(state.get("skills"), dict):
         raise ValueError(f"invalid {label}: {path}")
     if any(
         not valid_name(name)
@@ -93,7 +98,7 @@ def digest(path):
 
 
 def selections(manifest, repo):
-    if not isinstance(manifest, dict) or manifest.get("version") != 1:
+    if not isinstance(manifest, dict) or not version_1(manifest.get("version")):
         raise ValueError("expected manifest version 1")
     if not isinstance(manifest.get("sources"), list) or "custom" in manifest:
         raise TypeError("use one sources list with source and skills entries")
@@ -223,7 +228,7 @@ def reconcile_claude(args, selected, root, results, failures):
     link_file = state_dir / "claude-links.json"
     legacy: LinkState = read_json(link_file) or {"version": 1, "links": []}
     if (
-        legacy.get("version") != 1
+        not version_1(legacy.get("version"))
         or not isinstance(legacy.get("links"), list)
         or any(not valid_name(name) for name in legacy["links"])
     ):

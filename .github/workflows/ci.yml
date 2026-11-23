@@ -19,13 +19,15 @@ jobs:
     env:
       CHEZMOI_VERSION: v2.74.2
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       # The official installers verify the release checksum.
       - name: Install chezmoi (Linux)
         if: runner.os == 'Linux'
         run: |
-          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
+          # Download first so a failed fetch stops the job instead of running "sh -c ''".
+          curl -fsLS get.chezmoi.io -o "$RUNNER_TEMP/install-chezmoi.sh"
+          sh "$RUNNER_TEMP/install-chezmoi.sh" -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Install chezmoi (Windows)
         if: runner.os == 'Windows'
