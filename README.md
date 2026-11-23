@@ -249,6 +249,7 @@ uv run ruff check
 uv run ruff format --check
 uv run ty check
 uv run pytest
+git diff --check
 ```
 
 pytest runs the existing unittest tests and any new pytest tests. Tests use
