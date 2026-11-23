@@ -79,6 +79,17 @@ def test_dotfile_commands_delegate_arguments_output_and_exit_code(
     assert result.stdout.strip() == f"chezmoi {command} --exclude scripts"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
+def test_chezmoi_killed_by_signal_reports_shell_status(tmp_path: Path):
+    chezmoi = tmp_path / "chezmoi"
+    chezmoi.write_text("#!/bin/sh\nkill -TERM $$\n")
+    chezmoi.chmod(0o755)
+
+    result = rig("diff", env=dict(os.environ, PATH=f"{tmp_path}:/bin:/usr/bin"))
+
+    assert result.returncode == 128 + 15
+
+
 @pytest.mark.parametrize(
     ("command", "present", "missing", "hint"),
     [

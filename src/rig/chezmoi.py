@@ -40,7 +40,7 @@ def run(command: str, *args: str, needs: tuple[Tool, ...] = ()) -> int:
     for tool in needs:
         find(command, tool)
     try:
-        return subprocess.run([executable, command, *args], check=False).returncode
+        code = subprocess.run([executable, command, *args], check=False).returncode
     except OSError as error:
         raise DependencyError(
             f"rig {command} could not start chezmoi at {executable}: {error}. "
@@ -48,3 +48,5 @@ def run(command: str, *args: str, needs: tuple[Tool, ...] = ()) -> int:
         ) from error
     except KeyboardInterrupt:
         return 130  # Shell convention for an interrupted command.
+    # POSIX reports a signal death as -signum; shells report 128 + signum.
+    return 128 - code if code < 0 else code
