@@ -42,7 +42,8 @@ chezmoi push       # Stage, commit, and push repo changes intentionally
 ```
 
 `rig diff` and `rig apply` delegate to chezmoi's active setup. Extra arguments
-pass through, for example `rig diff --exclude scripts`. Output, prompts, and
+pass through, for example `rig diff --exclude scripts`; a `--` separator is
+dropped, so write a target that starts with a dash as `./-name`. Output, prompts, and
 exit codes are chezmoi's. Plain `chezmoi diff` and `chezmoi apply` keep working
 without the `rig` CLI. Run `rig --help` for all commands and `rig --version`
 for the installed release.
