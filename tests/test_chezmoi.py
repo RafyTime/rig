@@ -38,7 +38,19 @@ class ChezmoiTest(unittest.TestCase):
             (repo / "home/ordinary.txt").write_text("configuration")
             config = base / "config.json"
             config.write_text("{}")
-            environment = dict(os.environ, UV_CACHE_DIR=str(base / "uv-cache"))
+            # The hooks must keep working for devices without the rig CLI. A
+            # directory that also holds a tool the hook needs stays, so a shared
+            # ~/.local/bin weakens this check locally; CI keeps the tools apart.
+            path = os.pathsep.join(
+                entry
+                for entry in os.environ.get("PATH", "").split(os.pathsep)
+                if not shutil.which("rig", path=entry)
+                or shutil.which("uv", path=entry)
+                or shutil.which("chezmoi", path=entry)
+            )
+            environment = dict(
+                os.environ, PATH=path, UV_CACHE_DIR=str(base / "uv-cache")
+            )
             command = [
                 "chezmoi",
                 "--source",

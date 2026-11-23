@@ -1,9 +1,19 @@
 [project]
 name = "rig"
-version = "0.0.0"
+version = "0.1.0"
 description = "Leo's shared personal configuration and agent setup."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "rich>=15.0.0",
+    "typer>=0.29.2",
+]
+
+[project.scripts]
+rig = "rig.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = ["pytest", "ruff", "ty"]

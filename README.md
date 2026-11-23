@@ -9,9 +9,11 @@ supports Fedora and native Windows.
 
 ## Another device
 
-Install chezmoi, Git, uv, and Bun, then authenticate with GitHub.
+Install chezmoi, Git, uv, and Bun, then authenticate with GitHub. Install
+the `rig` CLI from a release tag and set up the checkout:
 
 ```sh
+uv tool install git+https://github.com/RafyTime/rig@v0.1.0
 chezmoi init <rig-clone-url>
 ```
 
@@ -21,8 +23,8 @@ On Windows, see [PowerShell execution policy](#powershell-execution-policy)
 if the skill sync hook is blocked.
 
 ```sh
-chezmoi diff
-chezmoi apply
+rig diff
+rig apply
 ```
 
 Run `chezmoi source-path` and check that it points to the `home/` directory
@@ -34,10 +36,17 @@ it loads the personal rule.
 Edit `agents/AGENTS.md`, then run from any directory:
 
 ```sh
-chezmoi diff       # Preview installed changes
-chezmoi apply      # Apply locally
+rig diff           # Preview installed changes
+rig apply          # Apply locally and sync skills once
 chezmoi push       # Stage, commit, and push repo changes intentionally
 ```
+
+`rig diff` and `rig apply` delegate to chezmoi's active setup. Extra arguments
+pass through, for example `rig diff --exclude scripts`; a `--` separator is
+dropped, so write a target that starts with a dash as `./-name`. Output, prompts, and
+exit codes are chezmoi's. Plain `chezmoi diff` and `chezmoi apply` keep working
+without the `rig` CLI. Run `rig --help` for all commands and `rig --version`
+for the installed release.
 
 On another device, `chezmoi update` pulls and applies. To preview first, use
 `chezmoi update --apply=false`, then `chezmoi diff` and `chezmoi apply`.
@@ -53,6 +62,7 @@ commit or push unless explicitly requested.
 | [`agents/skills.json`](agents/skills.json) | Selects downloaded and custom skills. |
 | [`agents/skills/`](agents/skills/) | Source for custom skills. |
 | [`zed/`](zed/) | Reference settings for Zed. |
+| [`src/rig/`](src/rig/) | The `rig` CLI package. |
 
 Templates render the personal instructions at `~/.agents/AGENTS.md`,
 `~/.codex/AGENTS.md`, `~/.cursor/rules/personal.mdc` (always applied), and
@@ -253,9 +263,10 @@ git diff --check
 ```
 
 pytest runs the existing unittest tests and any new pytest tests. Tests use
-temporary homes and mocked downloads, plus an actual chezmoi apply integration.
-Locally, that integration test is skipped unless chezmoi and uv are installed.
-In CI, it always runs. On Windows, the integration test uses the same
+temporary homes and mocked downloads, plus actual chezmoi and `rig`
+integrations and a `uv tool install` from a temporary tagged Git repository.
+Locally, the integrations are skipped unless chezmoi, Git, and uv are
+installed. In CI, they always run. On Windows, the integration test uses the same
 PowerShell policy as `chezmoi apply`, and the ownership tests need permission
 to create symlinks (Developer Mode or an elevated shell). Network installs are
 a separate integration check.
