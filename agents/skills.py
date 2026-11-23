@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS_CLI = "skills@latest"
@@ -176,7 +177,7 @@ def reconcile_claude(args, selected, root, results, failures):
     destination = args.home / ".claude" / "skills"
     state_dir = args.home / ".local" / "state" / "rig"
     state_file = state_dir / "claude-skills.json"
-    state = read_json(state_file) or {"version": 1, "skills": {}}
+    state: dict[str, Any] = read_json(state_file) or {"version": 1, "skills": {}}
     if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
         raise ValueError(f"invalid Claude skill state: {state_file}")
     records = state["skills"]
@@ -189,7 +190,7 @@ def reconcile_claude(args, selected, root, results, failures):
     ):
         raise ValueError(f"invalid ownership entries: {state_file}")
     link_file = state_dir / "claude-links.json"
-    legacy = read_json(link_file) or {"version": 1, "links": []}
+    legacy: dict[str, Any] = read_json(link_file) or {"version": 1, "links": []}
     if (
         legacy.get("version") != 1
         or not isinstance(legacy.get("links"), list)
@@ -354,7 +355,7 @@ def reconcile(args):
     selected = selections(read_json(args.manifest), REPO)
     root = args.home / ".agents" / "skills"
     state_file = args.home / ".local" / "state" / "rig" / "skills.json"
-    state = read_json(state_file) or {"version": 1, "skills": {}}
+    state: dict[str, Any] = read_json(state_file) or {"version": 1, "skills": {}}
     if state.get("version") != 1 or not isinstance(state.get("skills"), dict):
         raise ValueError(f"invalid local state: {state_file}")
     records = state["skills"]

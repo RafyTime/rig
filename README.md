@@ -240,16 +240,21 @@ separately in `~/.local/state/rig/claude-skills.json`. The earlier
 
 ## Development checks
 
-Run these commands from the repo root:
+CI runs these checks on Linux and native Windows for pull requests and pushes
+to `main`. Run the same checks from the repo root with uv and Python 3.12+:
 
 ```sh
-uv run python -m unittest discover -s tests -v
-uvx ruff check agents/skills.py update-skills.py tests
-uvx ruff format --check agents/skills.py update-skills.py tests
-git diff --check
+uv sync
+uv run ruff check
+uv run ruff format --check
+uv run ty check
+uv run pytest
 ```
 
-Tests use temporary homes and mocked downloads, plus an actual chezmoi apply
-integration when chezmoi and uv are installed. On Windows, the integration test
-uses the same PowerShell policy as `chezmoi apply`. Network installs are a
-separate integration check.
+pytest runs the existing unittest tests and any new pytest tests. Tests use
+temporary homes and mocked downloads, plus an actual chezmoi apply integration.
+Locally, that integration test is skipped unless chezmoi and uv are installed.
+In CI, it always runs. On Windows, the integration test uses the same
+PowerShell policy as `chezmoi apply`, and the ownership tests need permission
+to create symlinks (Developer Mode or an elevated shell). Network installs are
+a separate integration check.

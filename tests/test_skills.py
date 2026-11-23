@@ -14,6 +14,7 @@ from unittest.mock import patch
 SPEC = importlib.util.spec_from_file_location(
     "rig_skills", Path(__file__).parents[1] / "agents/skills.py"
 )
+assert SPEC and SPEC.loader
 skills = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(skills)
 
