@@ -10,12 +10,21 @@ from pathlib import Path
 
 import pytest
 
+# Typer and Rich force color when these are set, as on GitHub Actions. Callers
+# that opt in get color; the tests check rig's default redirected output.
+COLOR_OVERRIDES = {"FORCE_COLOR", "PY_COLORS", "GITHUB_ACTIONS"}
+
 
 def rig(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None):
+    environment = {
+        key: value
+        for key, value in (os.environ if env is None else env).items()
+        if key not in COLOR_OVERRIDES
+    }
     return subprocess.run(
         [sys.executable, "-m", "rig", *args],
         cwd=cwd,
-        env=env,
+        env=environment,
         capture_output=True,
         encoding="utf-8",
         errors="replace",
@@ -40,7 +49,8 @@ def test_help_lists_dotfile_commands():
 def fake_tool(directory: Path, name: str, exit_code: int = 0) -> None:
     """Install a stand-in that echoes its arguments and exits with a known code."""
     if os.name == "nt":
-        script = f"@echo {name} %*\r\n@exit /b {exit_code}\r\n"
+        # write_text already turns \n into CRLF on Windows.
+        script = f"@echo {name} %*\n@exit /b {exit_code}\n"
         (directory / f"{name}.cmd").write_text(script)
     else:
         path = directory / name
@@ -92,6 +102,19 @@ def test_missing_dependency_stops_with_plain_recovery_step(
     assert "\x1b[" not in result.stderr
 
 
+def test_chezmoi_that_cannot_start_stops_with_plain_recovery_step(tmp_path: Path):
+    broken = tmp_path / ("chezmoi.exe" if os.name == "nt" else "chezmoi")
+    broken.write_bytes(b"not an executable")
+    broken.chmod(0o755)
+
+    result = rig("diff", env=dict(os.environ, PATH=str(tmp_path)))
+
+    assert result.returncode == 1
+    assert "rig diff could not start chezmoi" in result.stderr
+    assert "https://www.chezmoi.io/install/" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 REPO = Path(__file__).parents[1]
 
 # CI provisions both tools, so a missing one fails there instead of skipping.
@@ -111,7 +134,7 @@ with Path(__file__).with_name("sync-calls.log").open("a") as log:
 
 
 @needs_chezmoi_and_uv
-def test_diff_previews_and_apply_syncs_skills_once_from_outside_checkout(
+def test_diff_previews_and_each_apply_syncs_skills_once_from_outside_checkout(
     tmp_path: Path,
 ):
     checkout, home, elsewhere = tmp_path / "rig", tmp_path / "home", tmp_path / "cwd"
@@ -148,6 +171,20 @@ def test_diff_previews_and_apply_syncs_skills_once_from_outside_checkout(
     [call] = map(json.loads, sync_calls.read_text().splitlines())
     assert call[:2] == ["sync", "--home"]
     assert Path(call[2]) == home
+
+    (checkout / "home/dot_example").write_text("updated configuration")
+    preview = rig("diff", cwd=elsewhere, env=environment)
+
+    assert preview.returncode == 0, preview.stdout + preview.stderr
+    assert "updated configuration" in preview.stdout
+    assert (home / ".example").read_text() == "configuration"
+    assert len(sync_calls.read_text().splitlines()) == 1
+
+    applied = rig("apply", cwd=elsewhere, env=environment)
+
+    assert applied.returncode == 0, applied.stdout + applied.stderr
+    assert (home / ".example").read_text() == "updated configuration"
+    assert len(sync_calls.read_text().splitlines()) == 2
 
 
 @pytest.mark.skipif(

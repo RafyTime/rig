@@ -15,19 +15,18 @@ PURPOSE: dict[Tool, tuple[str, str]] = {
 }
 
 
-class MissingDependency(Exception):
-    def __init__(self, command: str, tool: Tool) -> None:
-        purpose, install = PURPOSE[tool]
-        super().__init__(
-            f"rig {command} needs {tool} {purpose}, but it is not on PATH. "
-            f"Install it from {install} and try again."
-        )
+class DependencyError(Exception):
+    """A tool rig delegates to is missing or cannot be started."""
 
 
 def find(command: str, tool: Tool) -> str:
     executable = shutil.which(tool)
     if executable is None:
-        raise MissingDependency(command, tool)
+        purpose, install = PURPOSE[tool]
+        raise DependencyError(
+            f"rig {command} needs {tool} {purpose}, but it is not on PATH. "
+            f"Install it from {install} and try again."
+        )
     return executable
 
 
@@ -42,5 +41,10 @@ def run(command: str, *args: str, needs: tuple[Tool, ...] = ()) -> int:
         find(command, tool)
     try:
         return subprocess.run([executable, command, *args], check=False).returncode
+    except OSError as error:
+        raise DependencyError(
+            f"rig {command} could not start chezmoi at {executable}: {error}. "
+            "Reinstall it from https://www.chezmoi.io/install/ and try again."
+        ) from error
     except KeyboardInterrupt:
         return 130  # Shell convention for an interrupted command.

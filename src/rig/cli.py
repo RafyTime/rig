@@ -45,7 +45,7 @@ def delegate(
 ) -> None:
     try:
         code = chezmoi.run(command, *args, needs=needs)
-    except chezmoi.MissingDependency as error:
+    except chezmoi.DependencyError as error:
         errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
         raise typer.Exit(1) from None
     raise typer.Exit(code)
