@@ -38,7 +38,15 @@ class ChezmoiTest(unittest.TestCase):
             (repo / "home/ordinary.txt").write_text("configuration")
             config = base / "config.json"
             config.write_text("{}")
-            environment = dict(os.environ, UV_CACHE_DIR=str(base / "uv-cache"))
+            # The hooks must keep working for devices without the rig CLI.
+            path = os.pathsep.join(
+                entry
+                for entry in os.environ.get("PATH", "").split(os.pathsep)
+                if not shutil.which("rig", path=entry)
+            )
+            environment = dict(
+                os.environ, PATH=path, UV_CACHE_DIR=str(base / "uv-cache")
+            )
             command = [
                 "chezmoi",
                 "--source",
