@@ -67,7 +67,11 @@ def chezmoi_output(executable: str, *args: str) -> str:
     """Capture what `chezmoi <args>` prints, raising SetupError if it fails."""
     result = chezmoi.launch("init", "chezmoi", [executable, *args], capture=True)
     if result.returncode != 0:
-        raise SetupError(f"`chezmoi {' '.join(args)}` failed: {result.stderr.strip()}")
+        raise SetupError(
+            f"`chezmoi {' '.join(args)}` failed: {result.stderr.strip()}. Check that "
+            "Git is installed (https://git-scm.com/downloads) and `chezmoi doctor` "
+            "passes, then try again."
+        )
     return result.stdout
 
 

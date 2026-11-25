@@ -28,6 +28,8 @@ tree = os.environ["FAKE_WORKING_TREE"]
 if sys.argv[1] == "dump-config":
     print(json.dumps({"sourceDir": tree, "workingTree": tree}))
 elif sys.argv[1] == "git":
+    if "FAKE_GIT_MISSING" in os.environ:
+        sys.exit('exec: "git": executable file not found in $PATH')
     print(Path(tree, ".git", "origin").read_text())
 """
 
@@ -126,6 +128,17 @@ def test_init_stops_when_chezmoi_manages_another_repository(
     assert origin in result.stderr
     assert requested in result.stderr
     assert "\x1b[" not in result.stderr
+
+
+def test_init_explains_how_to_recover_when_git_is_missing(device: dict[str, str]):
+    existing_checkout(device, "https://github.com/RafyTime/rig.git")
+
+    result = rig("init", env=dict(device, FAKE_GIT_MISSING="1"))
+
+    assert result.returncode == 1
+    assert "git" in result.stderr and "executable file not found" in result.stderr
+    assert "https://git-scm.com/" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 ASSET = "chezmoi-windows-amd64.exe" if os.name == "nt" else "chezmoi-linux-amd64"
