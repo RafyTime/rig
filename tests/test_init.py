@@ -26,6 +26,8 @@ with open(os.environ["FAKE_CHEZMOI_LOG"], "a") as log:
     print(json.dumps(sys.argv[1:]), file=log)
 tree = os.environ["FAKE_WORKING_TREE"]
 if sys.argv[1] == "dump-config":
+    if "FAKE_CONFIG_BROKEN" in os.environ:
+        sys.exit("chezmoi: invalid config")
     print(json.dumps({"sourceDir": tree, "workingTree": tree}))
 elif sys.argv[1] == "git":
     if "FAKE_GIT_MISSING" in os.environ:
@@ -130,6 +132,18 @@ def test_init_stops_when_chezmoi_manages_another_repository(
     assert "\x1b[" not in result.stderr
 
 
+def test_init_points_a_broken_chezmoi_config_to_chezmoi_doctor(
+    device: dict[str, str],
+):
+    result = rig("init", env=dict(device, FAKE_CONFIG_BROKEN="1"))
+
+    assert result.returncode == 1
+    assert "invalid config" in result.stderr
+    assert "chezmoi doctor" in result.stderr
+    assert "git-scm.com" not in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_init_explains_how_to_recover_when_git_is_missing(device: dict[str, str]):
     existing_checkout(device, "https://github.com/RafyTime/rig.git")
 
@@ -209,7 +223,8 @@ def test_init_refuses_an_undecodable_checksums_file(
     result = rig("init", env=dict(bare_device, RIG_CHEZMOI_RELEASES_URL=releases))
 
     assert result.returncode == 1
-    assert f"publishes no checksum for {ASSET}" in result.stderr
+    assert "could not read the checksums" in result.stderr
+    assert "https://www.chezmoi.io/install/" in result.stderr
     assert not (Path(bare_device["HOME"]) / INSTALLED).exists()
     assert "Traceback" not in result.stderr
 

@@ -39,7 +39,14 @@ def is_configured(repo: str) -> bool:
     if not (tree / ".git").exists():
         return False
     origin = chezmoi_output(
-        executable, "git", "--", "remote", "get-url", "origin"
+        executable,
+        "git",
+        "--",
+        "remote",
+        "get-url",
+        "origin",
+        recovery="Check that Git is installed (https://git-scm.com/downloads) and "
+        f"that {tree} has an origin remote, then try again.",
     ).strip()
     if canonical(origin) != canonical(repo):
         raise SetupError(
@@ -63,15 +70,16 @@ def canonical(repo: str) -> str:
     return f"{host}/{path.lower() if host == 'github.com' else path}"
 
 
-def chezmoi_output(executable: str, *args: str) -> str:
+def chezmoi_output(
+    executable: str,
+    *args: str,
+    recovery: str = "Check that `chezmoi doctor` passes, then try again.",
+) -> str:
     """Capture what `chezmoi <args>` prints, raising SetupError if it fails."""
     result = chezmoi.launch("init", "chezmoi", [executable, *args], capture=True)
     if result.returncode != 0:
-        raise SetupError(
-            f"`chezmoi {' '.join(args)}` failed: {result.stderr.strip()}. Check that "
-            "Git is installed (https://git-scm.com/downloads) and `chezmoi doctor` "
-            "passes, then try again."
-        )
+        reason = result.stderr.strip() or f"exit status {result.returncode}"
+        raise SetupError(f"`chezmoi {' '.join(args)}` failed ({reason}). {recovery}")
     return result.stdout
 
 
@@ -88,10 +96,14 @@ def install_chezmoi() -> Path:
         "https://github.com/twpayne/chezmoi/releases/download",
     )
     base = f"{releases}/v{CHEZMOI_VERSION}"
-    # Undecodable bytes cannot name the asset, so they fall through to "no checksum".
-    checksums = download(f"{base}/chezmoi_{CHEZMOI_VERSION}_checksums.txt").decode(
-        errors="replace"
-    )
+    try:
+        checksums = download(f"{base}/chezmoi_{CHEZMOI_VERSION}_checksums.txt").decode()
+    except UnicodeDecodeError as error:
+        raise SetupError(
+            f"rig init could not read the checksums published with chezmoi "
+            f"{CHEZMOI_VERSION} ({error}), so it did not install chezmoi. "
+            f"To continue, {INSTALL_HELP}."
+        ) from error
     binary = download(f"{base}/{asset}")
     expected = next(
         (
