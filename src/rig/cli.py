@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from rig import chezmoi, setup, skills
+from rig import bootstrap, chezmoi, skills
 
 # Rich drops styling when stderr is redirected, keeping scripted output plain.
 errors = Console(stderr=True, highlight=False, soft_wrap=True)
@@ -92,26 +92,26 @@ def init(
     repo: Annotated[
         str,
         typer.Argument(help="Configuration repository: OWNER/NAME or a Git URL."),
-    ] = setup.DEFAULT_REPO,
+    ] = bootstrap.DEFAULT_REPO,
 ) -> None:
     """Set up this device's Rig checkout without applying it."""
     try:
         try:
             chezmoi.find("init", "chezmoi")
         except chezmoi.DependencyError:
-            with errors.status(f"Installing chezmoi {setup.CHEZMOI_VERSION}..."):
-                installed = setup.install_chezmoi()
+            with errors.status(f"Installing chezmoi {bootstrap.CHEZMOI_VERSION}..."):
+                installed = bootstrap.install_chezmoi()
             errors.print(f"Installed verified chezmoi to {installed}.")
             if shutil.which("chezmoi") is None:
                 errors.print(
                     f"Rig finds it there; add {installed.parent} to PATH "
                     "to run chezmoi directly."
                 )
-        if setup.is_configured(repo):
+        if bootstrap.is_configured(repo):
             typer.echo(f"Rig is already set up from {repo}.")
             raise typer.Exit()
         code = chezmoi.run("init", repo)
-    except (chezmoi.DependencyError, setup.SetupError) as error:
+    except (chezmoi.DependencyError, bootstrap.SetupError) as error:
         errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
         raise typer.Exit(1) from None
     if code == 0:
