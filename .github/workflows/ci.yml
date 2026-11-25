@@ -68,6 +68,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Stop on a failing native command such as git, not only on cmdlet errors.
+          $PSNativeCommandUseErrorActionPreference = $true
           $fresh = Join-Path $env:RUNNER_TEMP 'fresh-home'
           $config = Join-Path $env:RUNNER_TEMP 'fresh-config'
           New-Item -ItemType Directory -Force $fresh, (Join-Path $config 'home') | Out-Null
