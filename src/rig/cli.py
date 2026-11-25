@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from rig import chezmoi, setup
+from rig import chezmoi, setup, skills
 
 # Rich drops styling when stderr is redirected, keeping scripted output plain.
 errors = Console(stderr=True, highlight=False, soft_wrap=True)
@@ -18,6 +18,7 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(skills.app, name="skills")
 
 
 def show_version(value: bool) -> None:
@@ -66,6 +67,24 @@ def diff(context: typer.Context) -> None:
 def apply(context: typer.Context) -> None:
     """Apply dotfiles, then sync skills once through the chezmoi hook."""
     delegate("apply", context.args, needs=("uv",))
+
+
+@app.command(context_settings=PASSTHROUGH)
+def update(
+    context: typer.Context,
+    no_apply: Annotated[
+        bool,
+        typer.Option(
+            "--no-apply", help="Pull only; leave dotfiles and skills untouched."
+        ),
+    ] = False,
+) -> None:
+    """Pull Rig, then apply it and sync skills once through the chezmoi hook."""
+    if no_apply:
+        # Without apply, chezmoi runs no scripts, so the skill sync hook stays idle.
+        delegate("update", ["--apply=false", *context.args])
+    else:
+        delegate("update", context.args, needs=("uv",))
 
 
 @app.command()
