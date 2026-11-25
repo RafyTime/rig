@@ -9,7 +9,7 @@ type Tool = Literal["chezmoi", "uv"]
 PURPOSE: dict[Tool, tuple[str, str]] = {
     "chezmoi": ("to manage dotfiles", "https://www.chezmoi.io/install/"),
     "uv": (
-        "to run the skill sync hook",
+        "to run the skills engine",
         "https://docs.astral.sh/uv/getting-started/installation/",
     ),
 }

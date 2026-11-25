@@ -7,7 +7,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from rig import chezmoi
+from rig import chezmoi, skills
 
 # Rich drops styling when stderr is redirected, keeping scripted output plain.
 errors = Console(stderr=True, highlight=False, soft_wrap=True)
@@ -17,6 +17,7 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(skills.app, name="skills")
 
 
 def show_version(value: bool) -> None:
