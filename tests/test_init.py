@@ -90,6 +90,7 @@ def existing_checkout(environment: dict[str, str], origin: str) -> None:
         ("RafyTime/rig", "https://github.com/RafyTime/rig.git"),
         ("rafytime/rig", "git@github.com:RafyTime/rig.git"),
         ("https://github.com/RafyTime/rig", "https://github.com/RafyTime/rig.git"),
+        ("https://Git.Example.com/leo/rig", "ssh://git@git.example.com/leo/rig.git"),
     ],
 )
 def test_repeated_init_recognizes_the_configured_repository(
@@ -104,15 +105,26 @@ def test_repeated_init_recognizes_the_configured_repository(
     assert "already set up" in result.stdout
 
 
-def test_init_stops_when_chezmoi_manages_another_repository(device: dict[str, str]):
-    existing_checkout(device, "https://github.com/someone/dotfiles.git")
+@pytest.mark.parametrize(
+    ("requested", "origin"),
+    [
+        ("RafyTime/rig", "https://github.com/someone/dotfiles.git"),
+        # Only GitHub names are case-insensitive; other paths may differ by case.
+        ("file:///srv/Rig", "file:///srv/rig"),
+        ("https://git.example.com/Leo/Rig", "https://git.example.com/leo/rig"),
+    ],
+)
+def test_init_stops_when_chezmoi_manages_another_repository(
+    device: dict[str, str], requested: str, origin: str
+):
+    existing_checkout(device, origin)
 
-    result = rig("init", env=device)
+    result = rig("init", requested, env=device)
 
     assert result.returncode == 1
     assert not any(call[0] == "init" for call in chezmoi_calls(device))
-    assert "https://github.com/someone/dotfiles.git" in result.stderr
-    assert "RafyTime/rig" in result.stderr
+    assert origin in result.stderr
+    assert requested in result.stderr
     assert "\x1b[" not in result.stderr
 
 

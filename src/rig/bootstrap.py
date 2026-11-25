@@ -57,7 +57,10 @@ def canonical(repo: str) -> str:
     repo = re.sub(r"^[a-z+]+://", "", repo)
     repo = re.sub(r"^[^@/]+@", "", repo)
     repo = repo.replace(":", "/", 1)  # scp-like `host:path`.
-    return repo.removesuffix("/").removesuffix(".git").lower()
+    host, _, path = repo.removesuffix("/").removesuffix(".git").partition("/")
+    host = host.lower()
+    # GitHub owner and repository names are case-insensitive; other paths may not be.
+    return f"{host}/{path.lower() if host == 'github.com' else path}"
 
 
 def chezmoi_output(executable: str, *args: str) -> str:
