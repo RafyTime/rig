@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -126,12 +127,19 @@ def install_chezmoi() -> Path:
     destination = chezmoi.local_bin() / (
         "chezmoi.exe" if sys.platform == "win32" else "chezmoi"
     )
-    partial = destination.with_name(f".{destination.name}.download")
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        partial.write_bytes(binary)
-        partial.chmod(0o755)
-        partial.replace(destination)
+        # A file per run, so concurrent inits never write to each other's download.
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent, prefix=f".{destination.name}.", delete=False
+        ) as file:
+            file.write(binary)
+        partial = Path(file.name)
+        try:
+            partial.chmod(0o755)
+            partial.replace(destination)
+        finally:
+            partial.unlink(missing_ok=True)
     except OSError as error:
         raise SetupError(
             f"rig init could not install chezmoi to {destination}: {error}. "
