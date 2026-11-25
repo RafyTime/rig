@@ -212,7 +212,7 @@ def test_sync_adopts_matching_existing_copies_only_when_asked(device: Device):
 @pytest.mark.parametrize(
     ("present", "missing", "hint"),
     [
-        ([], "chezmoi", "https://www.chezmoi.io/install/"),
+        ([], "chezmoi", "Run rig init to install it"),
         (["chezmoi"], "uv", "https://docs.astral.sh/uv/"),
     ],
 )

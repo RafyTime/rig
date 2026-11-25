@@ -31,9 +31,14 @@ def find(command: str, tool: Tool) -> str:
         executable = shutil.which(tool, path=str(local_bin()))
     if executable is None:
         purpose, install = PURPOSE[tool]
+        # rig init installs chezmoi itself, so it is the next step everywhere else.
+        step = (
+            f"Run rig init to install it, or install it from {install}."
+            if tool == "chezmoi" and command != "init"
+            else f"Install it from {install} and try again."
+        )
         raise DependencyError(
-            f"rig {command} needs {tool} {purpose}, but it is not on PATH. "
-            f"Install it from {install} and try again."
+            f"rig {command} needs {tool} {purpose}, but it is not on PATH. {step}"
         )
     return executable
 

@@ -101,8 +101,9 @@ def test_chezmoi_killed_by_signal_reports_shell_status(tmp_path: Path):
 @pytest.mark.parametrize(
     ("command", "present", "missing", "hint"),
     [
-        ("diff", [], "chezmoi", "https://www.chezmoi.io/install/"),
-        ("apply", [], "chezmoi", "https://www.chezmoi.io/install/"),
+        ("diff", [], "chezmoi", "Run rig init to install it"),
+        ("apply", [], "chezmoi", "Run rig init to install it"),
+        ("update", [], "chezmoi", "Run rig init to install it"),
         ("apply", ["chezmoi"], "uv", "https://docs.astral.sh/uv/"),
         ("update", ["chezmoi"], "uv", "https://docs.astral.sh/uv/"),
     ],
