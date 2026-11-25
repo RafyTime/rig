@@ -24,6 +24,18 @@ I wanted to share some of my preferences here so we can be more aligned as we wo
 - Include before-and-after evidence in the PR. Rerun the same reproduction for bugs, use screenshots for visual changes, and record motion or timing. For performance changes, report base and branch measurements under the same workload. State what you couldn't verify.
 - Watch PRs you open until the latest pushed commit is mergeable or you need my input. Address CI failures and actionable code review feedback. After pushing a fix, reply in the review thread with what changed and the commit, then resolve it. Leave threads that need a decision open.
 
+## Reporting Back
+
+End each task with:
+
+- **Done:** the outcome and whether checks passed. Up to 5–10 lines covering only what matters.
+- **Needs you:** decisions, approvals, blockers, and anything I should know or watch out for, one line each. Omit if none.
+- **Next:** up to 3 recommended next steps.
+
+Skip the headings when the whole reply fits in 2–3 sentences. For questions, answer in the first sentence.
+
+Leave out what the diff, commits, or tool output already show, and how you did the work unless it changes what I should do. Put unrelated findings in **Needs you** as a single line, or leave them out.
+
 ## Coding Preferences
 
 - Keep things simple. Channel "yagni" energy unless told otherwise.
