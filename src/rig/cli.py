@@ -77,7 +77,9 @@ def update(
     """Pull Rig, then apply it and sync skills once through the chezmoi hook."""
     if no_apply:
         # Without apply, chezmoi runs no scripts, so the skill sync hook stays idle.
-        delegate("update", ["--apply=false", *context.args])
+        # Last so a passed-through --apply cannot override it; chezmoi keeps the
+        # last value of a repeated flag.
+        delegate("update", [*context.args, "--apply=false"])
     else:
         delegate("update", context.args, needs=("uv",))
 

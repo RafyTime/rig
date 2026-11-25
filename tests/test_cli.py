@@ -61,10 +61,10 @@ def fake_tool(directory: Path, name: str, exit_code: int = 0) -> None:
 @pytest.mark.parametrize(
     ("command", "delegated"),
     [
-        (["diff"], "diff"),
-        (["apply"], "apply"),
-        (["update"], "update"),
-        (["update", "--no-apply"], "update --apply=false"),
+        (["diff"], "diff --exclude scripts"),
+        (["apply"], "apply --exclude scripts"),
+        (["update"], "update --exclude scripts"),
+        (["update", "--no-apply"], "update --exclude scripts --apply=false"),
     ],
 )
 def test_dotfile_commands_delegate_arguments_output_and_exit_code(
@@ -84,7 +84,7 @@ def test_dotfile_commands_delegate_arguments_output_and_exit_code(
     )
 
     assert result.returncode == 7
-    assert result.stdout.strip() == f"chezmoi {delegated} --exclude scripts"
+    assert result.stdout.strip() == f"chezmoi {delegated}"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
@@ -134,6 +134,18 @@ def test_pull_only_update_does_not_need_the_skill_sync_hook(tmp_path: Path):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "chezmoi update --apply=false"
+
+
+def test_pull_only_update_cannot_be_overridden_into_an_apply(tmp_path: Path):
+    fake_tool(tmp_path, "chezmoi")
+
+    result = rig(
+        "update", "--no-apply", "--apply=true", env=dict(os.environ, PATH=str(tmp_path))
+    )
+
+    assert result.returncode == 0, result.stderr
+    # chezmoi takes the last value given for a flag.
+    assert result.stdout.strip() == "chezmoi update --apply=true --apply=false"
 
 
 def test_chezmoi_that_cannot_start_stops_with_plain_recovery_step(tmp_path: Path):
