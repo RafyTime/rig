@@ -9,13 +9,21 @@ supports Fedora and native Windows.
 
 ## Another device
 
-Install chezmoi, Git, uv, and Bun, then authenticate with GitHub. Install
-the `rig` CLI from a release tag and set up the checkout:
+Install Git, uv, and Bun, then authenticate with GitHub. Install the `rig`
+CLI from a release tag and set up the checkout:
 
 ```sh
-uv tool install git+https://github.com/RafyTime/rig@v0.1.0
-chezmoi init <rig-clone-url>
+uv tool install git+https://github.com/RafyTime/rig@v0.2.0
+rig init                 # Or: rig init OWNER/NAME for your own fork
 ```
+
+`rig init` reuses chezmoi from PATH. Without it, Rig downloads the official
+chezmoi release for x86-64 Fedora or Windows, checks it against the release's
+published SHA-256 checksum, and installs it to `~/.local/bin`, where later `rig`
+commands find it even if that directory is not on PATH. Init clones the
+checkout but applies nothing; your dotfiles and skills change only on
+`rig apply`. Running it again for the same repository is safe, and it stops if
+chezmoi already manages a different one.
 
 If this device already has selected skills installed, follow
 [Adopt existing skills](#adopt-existing-skills) before the first apply.
@@ -48,8 +56,10 @@ exit codes are chezmoi's. Plain `chezmoi diff` and `chezmoi apply` keep working
 without the `rig` CLI. Run `rig --help` for all commands and `rig --version`
 for the installed release.
 
-On another device, `chezmoi update` pulls and applies. To preview first, use
-`chezmoi update --apply=false`, then `chezmoi diff` and `chezmoi apply`.
+On another device, `rig update` pulls Rig, applies it, and syncs skills once
+without refreshing downloaded versions. To preview first, run
+`rig update --no-apply`, which only pulls, then `rig diff` and `rig apply`.
+`chezmoi update` and `chezmoi update --apply=false` do the same without the CLI.
 Automatic commits, pushes, and background sync are disabled. Agents must not
 commit or push unless explicitly requested.
 
@@ -76,6 +86,10 @@ On each apply, chezmoi runs `agents/skills.py sync` through uv. Sync refreshes
 custom skills and uses Bun with `skills@latest` to fetch missing downloaded
 skills. Use an explicit update to refresh installed downloaded skills.
 
+`rig skills` runs the same engine from the active chezmoi checkout against its
+destination, so it works from any directory without applying dotfiles. It needs
+chezmoi, uv, and Bun.
+
 ### Select and update skills
 
 `agents/skills.json` is the selection manifest. For example:
@@ -94,28 +108,32 @@ Sources beginning with `./` are local skill containers relative to the Rig
 checkout. Each selected name maps to `<source>/<name>/SKILL.md`. Add shared
 skills to the manifest. Direct CLI installs stay local until selected.
 
-From the repo root:
-
 ```sh
-uv run --script agents/skills.py sync --dry-run  # Plan without writes/downloads
-uv run update-skills.py                       # Explicitly refresh selected skills
-uv run update-skills.py --dry-run             # Plan an update without downloading
+rig skills sync            # Install missing selections, refresh custom skills
+rig skills sync --dry-run  # Plan without writes/downloads
+rig skills update          # Explicitly refresh selected downloaded skills
+rig skills update --dry-run  # Plan an update without downloading
 ```
+
+Sync keeps installed downloaded versions; only `rig skills update` refreshes
+them. For automation, the script entry points remain available from the repo
+root: `uv run --script agents/skills.py sync|update [--dry-run]` and
+`uv run update-skills.py [--dry-run]`.
 
 ### Adopt existing skills
 
-On an existing device, run these commands once from the Rig checkout root to
-adopt matching CLI-managed installations:
+On an existing device, run these commands once to adopt matching CLI-managed
+installations:
 
 ```sh
-uv run --script agents/skills.py sync --adopt-existing --dry-run
-uv run --script agents/skills.py sync --adopt-existing
+rig skills sync --adopt-existing --dry-run
+rig skills sync --adopt-existing
 ```
 
 Adoption trusts current installed contents as the baseline when the existing
 CLI lock identifies the selected source; it cannot establish whether those
 contents were modified before adoption. Unknown-origin collisions are preserved.
-Use `update-skills.py` for later updates. Rig tracks ownership separately
+Use `rig skills update` for later updates. Rig tracks ownership separately
 from the global skills CLI.
 
 ### Sync behavior
@@ -173,8 +191,8 @@ To fork another managed skill:
 1. Copy its installed folder into `agents/skills/<name>/` before modifying it.
 2. Move its name from the downloaded source to the `./agents/skills` source's
    `skills` list in `agents/skills.json`. Keep the skill's frontmatter name.
-3. Run `uv run --script agents/skills.py sync --adopt-existing --dry-run`, then
-   run it without `--dry-run`. This explicitly transfers ownership only when the
+3. Run `rig skills sync --adopt-existing --dry-run`, then run it without
+   `--dry-run`. This explicitly transfers ownership only when the
    custom source, installed copy, and previous baseline match.
 4. Make your edits in rig and apply normally. On a fresh device, apply installs
    the custom source directly. Existing devices need the explicit adoption step

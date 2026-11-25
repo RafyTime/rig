@@ -41,3 +41,63 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run ty check
       - run: uv run pytest
+      # Routine tests serve chezmoi locally; this downloads the official release.
+      - name: Init, diff, and apply a fresh device (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          home="$RUNNER_TEMP/fresh-home" config="$RUNNER_TEMP/fresh-config"
+          mkdir -p "$home" "$config/home"
+          echo home > "$config/.chezmoiroot"
+          echo configured > "$config/home/dot_example"
+          git -C "$config" init --quiet
+          git -C "$config" add .
+          git -C "$config" -c user.name=CI -c user.email=ci@example.invalid commit --quiet -m config
+          # Leave ~/.local/bin, where CI's chezmoi lives, off PATH.
+          rig() {
+            env -u XDG_CONFIG_HOME PATH="/usr/bin:/bin:$(dirname "$(command -v uv)")" \
+              HOME="$home" .venv/bin/python -m rig "$@"
+          }
+          rig init "file://$config"
+          rig init "file://$config" | grep "already set up"
+          test -x "$home/.local/bin/chezmoi"
+          rig diff | grep configured
+          test ! -e "$home/.example"
+          rig apply
+          grep configured "$home/.example"
+      - name: Init, diff, and apply a fresh device (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Stop on a failing native command such as git, not only on cmdlet errors.
+          $PSNativeCommandUseErrorActionPreference = $true
+          $fresh = Join-Path $env:RUNNER_TEMP 'fresh-home'
+          $config = Join-Path $env:RUNNER_TEMP 'fresh-config'
+          New-Item -ItemType Directory -Force $fresh, (Join-Path $config 'home') | Out-Null
+          Set-Content (Join-Path $config '.chezmoiroot') 'home'
+          Set-Content (Join-Path $config 'home/dot_example') 'configured'
+          git -C $config init --quiet
+          git -C $config add .
+          git -C $config -c user.name=CI -c user.email=ci@example.invalid commit --quiet -m config
+          $python = (Resolve-Path .venv/Scripts/python.exe).Path
+          $repo = ([Uri]$config).AbsoluteUri
+          # Leave the runner's chezmoi off PATH.
+          $env:PATH = @(
+            (Split-Path (Get-Command uv).Source)
+            (Split-Path (Get-Command git).Source)
+            "$env:SystemRoot\System32"
+          ) -join ';'
+          $env:HOME = $fresh
+          $env:USERPROFILE = $fresh
+          Remove-Item Env:XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+          function Invoke-Rig {
+            $output = & $python -m rig @args | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "rig $args exited $LASTEXITCODE" }
+            $output
+          }
+          Invoke-Rig init $repo
+          if ((Invoke-Rig init $repo) -notmatch 'already set up') { throw 'repeated init did not recognize the checkout' }
+          if (-not (Test-Path (Join-Path $fresh '.local/bin/chezmoi.exe'))) { throw 'chezmoi was not installed' }
+          if ((Invoke-Rig diff) -notmatch 'configured') { throw 'diff did not preview the change' }
+          if (Test-Path (Join-Path $fresh '.example')) { throw 'diff wrote a file' }
+          Invoke-Rig apply
+          if ((Get-Content (Join-Path $fresh '.example')) -notmatch 'configured') { throw 'apply did not write the file' }

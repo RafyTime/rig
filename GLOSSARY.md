@@ -24,3 +24,9 @@ An intentional refresh of a selected downloaded skill from its upstream source.
 
 **Unlisted skill**:
 An installed skill that is absent from the shared skill selection and remains outside its management.
+
+**Active checkout**:
+The local clone of the configuration repository that chezmoi manages on a device, set up by `rig init`.
+
+**Skills engine**:
+The script in the active checkout that syncs and updates installed skills against the skill selection.

@@ -1,22 +1,20 @@
 """Command parsing and dispatch for the rig CLI."""
 
+import shutil
 from importlib.metadata import version
 from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.text import Text
 
-from rig import chezmoi
-
-# Rich drops styling when stderr is redirected, keeping scripted output plain.
-errors = Console(stderr=True, highlight=False, soft_wrap=True)
+from rig import bootstrap, chezmoi, skills
+from rig.report import errors, fail
 
 app = typer.Typer(
     help="Manage your Rig setup across devices.",
     no_args_is_help=True,
     add_completion=False,
 )
+app.add_typer(skills.app, name="skills")
 
 
 def show_version(value: bool) -> None:
@@ -46,8 +44,7 @@ def delegate(
     try:
         code = chezmoi.run(command, *args, needs=needs)
     except chezmoi.DependencyError as error:
-        errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
-        raise typer.Exit(1) from None
+        fail(error)
     raise typer.Exit(code)
 
 
@@ -65,3 +62,54 @@ def diff(context: typer.Context) -> None:
 def apply(context: typer.Context) -> None:
     """Apply dotfiles, then sync skills once through the chezmoi hook."""
     delegate("apply", context.args, needs=("uv",))
+
+
+@app.command(context_settings=PASSTHROUGH)
+def update(
+    context: typer.Context,
+    no_apply: Annotated[
+        bool,
+        typer.Option(
+            "--no-apply", help="Pull only; leave dotfiles and skills untouched."
+        ),
+    ] = False,
+) -> None:
+    """Pull Rig, then apply it and sync skills once through the chezmoi hook."""
+    if no_apply:
+        # Without apply, chezmoi runs no scripts, so the skill sync hook stays idle.
+        # Last so a passed-through --apply cannot override it; chezmoi keeps the
+        # last value of a repeated flag.
+        delegate("update", [*context.args, "--apply=false"])
+    else:
+        delegate("update", context.args, needs=("uv",))
+
+
+@app.command()
+def init(
+    repo: Annotated[
+        str,
+        typer.Argument(help="Configuration repository: OWNER/NAME or a Git URL."),
+    ] = bootstrap.DEFAULT_REPO,
+) -> None:
+    """Set up this device's Rig checkout without applying it."""
+    try:
+        try:
+            chezmoi.find("init", "chezmoi")
+        except chezmoi.DependencyError:
+            with errors.status(f"Installing chezmoi {bootstrap.CHEZMOI_VERSION}..."):
+                installed = bootstrap.install_chezmoi()
+            errors.print(f"Installed verified chezmoi to {installed}.")
+            if shutil.which("chezmoi") is None:
+                errors.print(
+                    f"Rig finds it there; add {installed.parent} to PATH "
+                    "to run chezmoi directly."
+                )
+        if bootstrap.is_configured(repo):
+            typer.echo(f"Rig is already set up from {repo}.")
+            raise typer.Exit()
+        code = chezmoi.run("init", repo)
+    except (chezmoi.DependencyError, bootstrap.SetupError) as error:
+        fail(error)
+    if code == 0:
+        typer.echo("Rig is set up. Run `rig diff` to preview, then `rig apply`.")
+    raise typer.Exit(code)

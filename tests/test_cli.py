@@ -58,9 +58,17 @@ def fake_tool(directory: Path, name: str, exit_code: int = 0) -> None:
         path.chmod(0o755)
 
 
-@pytest.mark.parametrize("command", ["diff", "apply"])
+@pytest.mark.parametrize(
+    ("command", "delegated"),
+    [
+        (["diff"], "diff --exclude scripts"),
+        (["apply"], "apply --exclude scripts"),
+        (["update"], "update --exclude scripts"),
+        (["update", "--no-apply"], "update --exclude scripts --apply=false"),
+    ],
+)
 def test_dotfile_commands_delegate_arguments_output_and_exit_code(
-    tmp_path: Path, command: str
+    tmp_path: Path, command: list[str], delegated: str
 ):
     tools = tmp_path / "bin"
     tools.mkdir()
@@ -68,7 +76,7 @@ def test_dotfile_commands_delegate_arguments_output_and_exit_code(
     fake_tool(tools, "uv")
 
     result = rig(
-        command,
+        *command,
         "--exclude",
         "scripts",
         cwd=tmp_path,
@@ -76,7 +84,7 @@ def test_dotfile_commands_delegate_arguments_output_and_exit_code(
     )
 
     assert result.returncode == 7
-    assert result.stdout.strip() == f"chezmoi {command} --exclude scripts"
+    assert result.stdout.strip() == f"chezmoi {delegated}"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
@@ -93,9 +101,11 @@ def test_chezmoi_killed_by_signal_reports_shell_status(tmp_path: Path):
 @pytest.mark.parametrize(
     ("command", "present", "missing", "hint"),
     [
-        ("diff", [], "chezmoi", "https://www.chezmoi.io/install/"),
-        ("apply", [], "chezmoi", "https://www.chezmoi.io/install/"),
+        ("diff", [], "chezmoi", "Run rig init to install it"),
+        ("apply", [], "chezmoi", "Run rig init to install it"),
+        ("update", [], "chezmoi", "Run rig init to install it"),
         ("apply", ["chezmoi"], "uv", "https://docs.astral.sh/uv/"),
+        ("update", ["chezmoi"], "uv", "https://docs.astral.sh/uv/"),
     ],
 )
 def test_missing_dependency_stops_with_plain_recovery_step(
@@ -104,13 +114,38 @@ def test_missing_dependency_stops_with_plain_recovery_step(
     for tool in present:
         fake_tool(tmp_path, tool)
 
-    result = rig(command, env=dict(os.environ, PATH=str(tmp_path)))
+    # An empty home, so a chezmoi installed by `rig init` cannot satisfy rig.
+    home = str(tmp_path / "home")
+    result = rig(
+        command, env=dict(os.environ, PATH=str(tmp_path), HOME=home, USERPROFILE=home)
+    )
 
     assert result.returncode == 1
     assert result.stdout == ""
     assert f"rig {command} needs {missing}" in result.stderr
     assert hint in result.stderr
     assert "\x1b[" not in result.stderr
+
+
+def test_pull_only_update_does_not_need_the_skill_sync_hook(tmp_path: Path):
+    fake_tool(tmp_path, "chezmoi")
+
+    result = rig("update", "--no-apply", env=dict(os.environ, PATH=str(tmp_path)))
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "chezmoi update --apply=false"
+
+
+def test_pull_only_update_cannot_be_overridden_into_an_apply(tmp_path: Path):
+    fake_tool(tmp_path, "chezmoi")
+
+    result = rig(
+        "update", "--no-apply", "--apply=true", env=dict(os.environ, PATH=str(tmp_path))
+    )
+
+    assert result.returncode == 0, result.stderr
+    # chezmoi takes the last value given for a flag.
+    assert result.stdout.strip() == "chezmoi update --apply=true --apply=false"
 
 
 def test_chezmoi_that_cannot_start_stops_with_plain_recovery_step(tmp_path: Path):
