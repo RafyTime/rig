@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Literal
 
 type Tool = Literal["chezmoi", "uv"]
@@ -19,8 +20,15 @@ class DependencyError(Exception):
     """A tool rig delegates to is missing or cannot be started."""
 
 
+def local_bin() -> Path:
+    """Where `rig init` installs chezmoi, which may not be on PATH."""
+    return Path.home() / ".local" / "bin"
+
+
 def find(command: str, tool: Tool) -> str:
     executable = shutil.which(tool)
+    if executable is None and tool == "chezmoi":
+        executable = shutil.which(tool, path=str(local_bin()))
     if executable is None:
         purpose, install = PURPOSE[tool]
         raise DependencyError(

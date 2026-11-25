@@ -104,7 +104,11 @@ def test_missing_dependency_stops_with_plain_recovery_step(
     for tool in present:
         fake_tool(tmp_path, tool)
 
-    result = rig(command, env=dict(os.environ, PATH=str(tmp_path)))
+    # An empty home, so a chezmoi installed by `rig init` cannot satisfy rig.
+    home = str(tmp_path / "home")
+    result = rig(
+        command, env=dict(os.environ, PATH=str(tmp_path), HOME=home, USERPROFILE=home)
+    )
 
     assert result.returncode == 1
     assert result.stdout == ""

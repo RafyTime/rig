@@ -41,3 +41,26 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run ty check
       - run: uv run pytest
+      # Routine tests serve chezmoi locally; this downloads the official release.
+      - name: Init, diff, and apply a fresh device (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          home="$RUNNER_TEMP/fresh-home" config="$RUNNER_TEMP/fresh-config"
+          mkdir -p "$home" "$config/home"
+          echo home > "$config/.chezmoiroot"
+          echo configured > "$config/home/dot_example"
+          git -C "$config" init --quiet
+          git -C "$config" add .
+          git -C "$config" -c user.name=CI -c user.email=ci@example.invalid commit --quiet -m config
+          # Leave ~/.local/bin, where CI's chezmoi lives, off PATH.
+          rig() {
+            env -u XDG_CONFIG_HOME PATH="/usr/bin:/bin:$(dirname "$(command -v uv)")" \
+              HOME="$home" .venv/bin/python -m rig "$@"
+          }
+          rig init "file://$config"
+          rig init "file://$config" | grep "already set up"
+          test -x "$home/.local/bin/chezmoi"
+          rig diff | grep configured
+          test ! -e "$home/.example"
+          rig apply
+          grep configured "$home/.example"
