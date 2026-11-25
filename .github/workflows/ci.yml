@@ -64,3 +64,38 @@ jobs:
           test ! -e "$home/.example"
           rig apply
           grep configured "$home/.example"
+      - name: Init, diff, and apply a fresh device (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $fresh = Join-Path $env:RUNNER_TEMP 'fresh-home'
+          $config = Join-Path $env:RUNNER_TEMP 'fresh-config'
+          New-Item -ItemType Directory -Force $fresh, (Join-Path $config 'home') | Out-Null
+          Set-Content (Join-Path $config '.chezmoiroot') 'home'
+          Set-Content (Join-Path $config 'home/dot_example') 'configured'
+          git -C $config init --quiet
+          git -C $config add .
+          git -C $config -c user.name=CI -c user.email=ci@example.invalid commit --quiet -m config
+          $python = (Resolve-Path .venv/Scripts/python.exe).Path
+          $repo = ([Uri]$config).AbsoluteUri
+          # Leave the runner's chezmoi off PATH.
+          $env:PATH = @(
+            (Split-Path (Get-Command uv).Source)
+            (Split-Path (Get-Command git).Source)
+            "$env:SystemRoot\System32"
+          ) -join ';'
+          $env:HOME = $fresh
+          $env:USERPROFILE = $fresh
+          Remove-Item Env:XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+          function Invoke-Rig {
+            $output = & $python -m rig @args | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "rig $args exited $LASTEXITCODE" }
+            $output
+          }
+          Invoke-Rig init $repo
+          if ((Invoke-Rig init $repo) -notmatch 'already set up') { throw 'repeated init did not recognize the checkout' }
+          if (-not (Test-Path (Join-Path $fresh '.local/bin/chezmoi.exe'))) { throw 'chezmoi was not installed' }
+          if ((Invoke-Rig diff) -notmatch 'configured') { throw 'diff did not preview the change' }
+          if (Test-Path (Join-Path $fresh '.example')) { throw 'diff wrote a file' }
+          Invoke-Rig apply
+          if ((Get-Content (Join-Path $fresh '.example')) -notmatch 'configured') { throw 'apply did not write the file' }
