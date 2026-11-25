@@ -48,8 +48,10 @@ exit codes are chezmoi's. Plain `chezmoi diff` and `chezmoi apply` keep working
 without the `rig` CLI. Run `rig --help` for all commands and `rig --version`
 for the installed release.
 
-On another device, `chezmoi update` pulls and applies. To preview first, use
-`chezmoi update --apply=false`, then `chezmoi diff` and `chezmoi apply`.
+On another device, `rig update` pulls Rig, applies it, and syncs skills once
+without refreshing downloaded versions. To preview first, run
+`rig update --no-apply`, which only pulls, then `rig diff` and `rig apply`.
+`chezmoi update` and `chezmoi update --apply=false` do the same without the CLI.
 Automatic commits, pushes, and background sync are disabled. Agents must not
 commit or push unless explicitly requested.
 
