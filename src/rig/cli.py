@@ -5,13 +5,9 @@ from importlib.metadata import version
 from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.text import Text
 
 from rig import bootstrap, chezmoi, skills
-
-# Rich drops styling when stderr is redirected, keeping scripted output plain.
-errors = Console(stderr=True, highlight=False, soft_wrap=True)
+from rig.report import errors, fail
 
 app = typer.Typer(
     help="Manage your Rig setup across devices.",
@@ -48,8 +44,7 @@ def delegate(
     try:
         code = chezmoi.run(command, *args, needs=needs)
     except chezmoi.DependencyError as error:
-        errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
-        raise typer.Exit(1) from None
+        fail(error)
     raise typer.Exit(code)
 
 
@@ -112,8 +107,7 @@ def init(
             raise typer.Exit()
         code = chezmoi.run("init", repo)
     except (chezmoi.DependencyError, bootstrap.SetupError) as error:
-        errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
-        raise typer.Exit(1) from None
+        fail(error)
     if code == 0:
         typer.echo("Rig is set up. Run `rig diff` to preview, then `rig apply`.")
     raise typer.Exit(code)
