@@ -239,7 +239,18 @@ def test_unresolvable_checkout_stops_with_recovery_step(tmp_path: Path):
 
     assert result.returncode == 1
     assert "rig skills update could not find the active Rig checkout" in result.stderr
-    assert "chezmoi init" in result.stderr
+    assert "rig init" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_unreadable_checkout_paths_stop_with_recovery_step(tmp_path: Path):
+    fake_tool(tmp_path, "chezmoi")  # Echoes its arguments instead of JSON.
+    fake_tool(tmp_path, "uv")
+
+    result = rig("skills", "sync", env=dict(os.environ, PATH=str(tmp_path)))
+
+    assert result.returncode == 1
+    assert "rig skills sync could not read" in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -252,4 +263,4 @@ def test_uninitialized_checkout_stops_with_recovery_step(device: Device):
     assert result.returncode == 1
     assert "rig skills sync could not find the active Rig checkout" in result.stderr
     assert "no skills engine at" in result.stderr
-    assert "chezmoi init" in result.stderr
+    assert "rig init" in result.stderr

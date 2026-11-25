@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from test_cli import rig
+from test_cli import fake_tool, rig
 
 # Answers `dump-config` and `git` from an optional existing checkout and logs
 # every call, so tests can observe what rig asked chezmoi to do.
@@ -122,7 +122,7 @@ INSTALLED = Path(".local/bin", "chezmoi.exe" if os.name == "nt" else "chezmoi")
 
 def release(directory: Path, binary: bytes, checksum: str | None = None) -> str:
     """Serve a chezmoi release with its checksums file from a local directory."""
-    from rig.setup import CHEZMOI_VERSION
+    from rig.bootstrap import CHEZMOI_VERSION
 
     tag = directory / f"v{CHEZMOI_VERSION}"
     tag.mkdir(parents=True)
@@ -156,6 +156,37 @@ def test_init_refuses_a_chezmoi_download_with_a_wrong_checksum(
     assert "checksum" in result.stderr
     assert "https://www.chezmoi.io/install/" in result.stderr
     assert not (Path(bare_device["HOME"]) / INSTALLED).exists()
+    assert "Traceback" not in result.stderr
+
+
+def test_init_refuses_a_chezmoi_release_without_a_published_checksum(
+    tmp_path: Path, bare_device: dict[str, str]
+):
+    releases = release(tmp_path / "releases", b"chezmoi")
+    checksums = next((tmp_path / "releases").glob("*/*_checksums.txt"))
+    checksums.write_text(f"{'0' * 64}  chezmoi-darwin-arm64\n")
+
+    result = rig("init", env=dict(bare_device, RIG_CHEZMOI_RELEASES_URL=releases))
+
+    assert result.returncode == 1
+    assert f"publishes no checksum for {ASSET}" in result.stderr
+    assert not (Path(bare_device["HOME"]) / INSTALLED).exists()
+    assert "Traceback" not in result.stderr
+
+
+def test_init_stops_when_chezmoi_config_is_unreadable(tmp_path: Path):
+    tools, home = tmp_path / "bin", tmp_path / "home"
+    tools.mkdir()
+    home.mkdir()
+    fake_tool(tools, "chezmoi")  # Echoes its arguments instead of JSON.
+    environment = dict(
+        os.environ, PATH=str(tools), HOME=str(home), USERPROFILE=str(home)
+    )
+
+    result = rig("init", env=environment)
+
+    assert result.returncode == 1
+    assert "could not read chezmoi's configuration" in result.stderr
     assert "Traceback" not in result.stderr
 
 

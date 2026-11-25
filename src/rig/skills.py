@@ -2,17 +2,13 @@
 
 import json
 import os
-import subprocess
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich.console import Console
-from rich.text import Text
 
 from rig import chezmoi
-
-errors = Console(stderr=True, highlight=False, soft_wrap=True)
+from rig.report import fail
 
 app = typer.Typer(
     help="Sync and update skills from the active Rig checkout.",
@@ -20,72 +16,53 @@ app = typer.Typer(
 )
 
 # Same values the hook template reads, so both resolve the same engine and home.
-PATHS = (
+CHECKOUT_PATHS_TEMPLATE = (
     '{{ dict "workingTree" .chezmoi.workingTree "destDir" .chezmoi.destDir | toJson }}'
 )
+SET_UP = "Set up Rig with `rig init` and try again."
 
 
-def run(command: str, *flags: str) -> int:
+def run_engine(command: str, *flags: str) -> int:
     """Run `skills.py <command>` from chezmoi's working tree against its destination."""
     name = f"skills {command}"
     executable = chezmoi.find(name, "chezmoi")
     uv = chezmoi.find(name, "uv")
+    resolved = chezmoi.launch(
+        name,
+        "chezmoi",
+        [executable, "execute-template", CHECKOUT_PATHS_TEMPLATE],
+        capture=True,
+    )
+    if resolved.returncode != 0:
+        found = resolved.stderr.strip() or f"chezmoi exited {resolved.returncode}"
+        raise chezmoi.DependencyError(
+            f"rig {name} could not find the active Rig checkout ({found}). {SET_UP}"
+        )
     try:
-        resolved = subprocess.run(
-            [executable, "execute-template", PATHS],
-            capture_output=True,
-            encoding="utf-8",
-            check=False,
-        )
-    except OSError as error:
+        paths = json.loads(resolved.stdout)
+        tree, home = paths["workingTree"], paths["destDir"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
         raise chezmoi.DependencyError(
-            f"rig {name} could not start chezmoi at {executable}: {error}. "
-            "Reinstall it from https://www.chezmoi.io/install/ and try again."
+            f"rig {name} could not read the active Rig checkout's paths from chezmoi "
+            f"({error!r}). Check that `chezmoi doctor` passes, then try again."
         ) from error
-    paths = json.loads(resolved.stdout) if resolved.returncode == 0 else {}
-    engine = Path(paths.get("workingTree", ""), "agents", "skills.py")
-    if not paths or not engine.is_file():
-        found = (
-            f"no skills engine at {engine}"
-            if paths
-            else resolved.stderr.strip() or f"chezmoi exited {resolved.returncode}"
-        )
+    engine = Path(tree, "agents", "skills.py")
+    if not engine.is_file():
         raise chezmoi.DependencyError(
-            f"rig {name} could not find the active Rig checkout ({found}). "
-            "Set up Rig with `chezmoi init` and try again."
+            f"rig {name} could not find the active Rig checkout "
+            f"(no skills engine at {engine}). {SET_UP}"
         )
     # The engine prints emoji; keep them intact when output is redirected on Windows.
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
-    try:
-        return subprocess.run(
-            [
-                uv,
-                "run",
-                "--script",
-                str(engine),
-                command,
-                "--home",
-                paths["destDir"],
-                *flags,
-            ],
-            env=environment,
-            check=False,
-        ).returncode
-    except OSError as error:
-        raise chezmoi.DependencyError(
-            f"rig {name} could not start uv at {uv}: {error}. Reinstall it from "
-            "https://docs.astral.sh/uv/getting-started/installation/ and try again."
-        ) from error
-    except KeyboardInterrupt:
-        return 130
+    argv = [uv, "run", "--script", str(engine), command, "--home", home, *flags]
+    return chezmoi.exit_code(name, "uv", argv, env=environment)
 
 
-def engine(command: str, *flags: str) -> None:
+def delegate_to_engine(command: str, flags: list[str]) -> None:
     try:
-        code = run(command, *flags)
+        code = run_engine(command, *flags)
     except chezmoi.DependencyError as error:
-        errors.print(Text.assemble(("Error: ", "bold red"), str(error)))
-        raise typer.Exit(1) from None
+        fail(error)
     raise typer.Exit(code)
 
 
@@ -107,11 +84,15 @@ def sync(
     ] = False,
 ) -> None:
     """Install missing selections and refresh custom skills; keep downloaded versions."""
-    flags = ["--dry-run"] * dry_run + ["--adopt-existing"] * adopt_existing
-    engine("sync", *flags)
+    flags = []
+    if dry_run:
+        flags.append("--dry-run")
+    if adopt_existing:
+        flags.append("--adopt-existing")
+    delegate_to_engine("sync", flags)
 
 
 @app.command()
 def update(dry_run: DryRun = False) -> None:
     """Refresh selected downloaded skills from upstream."""
-    engine("update", *["--dry-run"] * dry_run)
+    delegate_to_engine("update", ["--dry-run"] if dry_run else [])

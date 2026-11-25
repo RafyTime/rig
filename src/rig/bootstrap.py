@@ -5,7 +5,6 @@ import json
 import os
 import platform
 import re
-import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -29,11 +28,19 @@ def is_configured(repo: str) -> bool:
     Raises SetupError if the existing checkout belongs to another repository.
     """
     executable = chezmoi.find("init", "chezmoi")
-    config = json.loads(output(executable, "dump-config", "--format", "json"))
-    tree = Path(config["workingTree"])
+    config = chezmoi_output(executable, "dump-config", "--format", "json")
+    try:
+        tree = Path(json.loads(config)["workingTree"])
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise chezmoi.DependencyError(
+            f"rig init could not read chezmoi's configuration ({error!r}). "
+            "Check that `chezmoi doctor` passes, then try again."
+        ) from error
     if not (tree / ".git").exists():
         return False
-    origin = output(executable, "git", "--", "remote", "get-url", "origin").strip()
+    origin = chezmoi_output(
+        executable, "git", "--", "remote", "get-url", "origin"
+    ).strip()
     if canonical(origin) != canonical(repo):
         raise SetupError(
             f"chezmoi already manages {tree}, a checkout of {origin}, not {repo}. "
@@ -53,16 +60,9 @@ def canonical(repo: str) -> str:
     return repo.removesuffix("/").removesuffix(".git").lower()
 
 
-def output(executable: str, *args: str) -> str:
-    try:
-        result = subprocess.run(
-            [executable, *args], capture_output=True, encoding="utf-8", check=False
-        )
-    except OSError as error:
-        raise chezmoi.DependencyError(
-            f"rig init could not start chezmoi at {executable}: {error}. "
-            "Reinstall it from https://www.chezmoi.io/install/ and try again."
-        ) from error
+def chezmoi_output(executable: str, *args: str) -> str:
+    """Capture what `chezmoi <args>` prints, raising SetupError if it fails."""
+    result = chezmoi.launch("init", "chezmoi", [executable, *args], capture=True)
     if result.returncode != 0:
         raise SetupError(f"`chezmoi {' '.join(args)}` failed: {result.stderr.strip()}")
     return result.stdout
@@ -74,7 +74,8 @@ def install_chezmoi() -> Path:
     The binary is written only after it matches the release's published checksum.
     """
     asset = release_asset()
-    # Overridable so mirrors and tests can serve the same release layout.
+    # A test and mirror hook for serving the same release layout elsewhere; not a
+    # documented user setting.
     releases = os.environ.get(
         "RIG_CHEZMOI_RELEASES_URL",
         "https://github.com/twpayne/chezmoi/releases/download",
@@ -82,10 +83,19 @@ def install_chezmoi() -> Path:
     base = f"{releases}/v{CHEZMOI_VERSION}"
     checksums = download(f"{base}/chezmoi_{CHEZMOI_VERSION}_checksums.txt").decode()
     binary = download(f"{base}/{asset}")
-    expected = {
-        name: digest
-        for digest, name in (line.split() for line in checksums.splitlines() if line)
-    }.get(asset)
+    expected = next(
+        (
+            fields[0]
+            for line in checksums.splitlines()
+            if (fields := line.split())[1:] == [asset]
+        ),
+        None,
+    )
+    if expected is None:
+        raise SetupError(
+            f"The chezmoi {CHEZMOI_VERSION} release publishes no checksum for "
+            f"{asset}, so rig did not install it. To continue, {INSTALL_HELP}."
+        )
     if hashlib.sha256(binary).hexdigest() != expected:
         raise SetupError(
             f"The downloaded {asset} does not match the checksum published with "
