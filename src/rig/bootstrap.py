@@ -84,7 +84,10 @@ def install_chezmoi() -> Path:
         "https://github.com/twpayne/chezmoi/releases/download",
     )
     base = f"{releases}/v{CHEZMOI_VERSION}"
-    checksums = download(f"{base}/chezmoi_{CHEZMOI_VERSION}_checksums.txt").decode()
+    # Undecodable bytes cannot name the asset, so they fall through to "no checksum".
+    checksums = download(f"{base}/chezmoi_{CHEZMOI_VERSION}_checksums.txt").decode(
+        errors="replace"
+    )
     binary = download(f"{base}/{asset}")
     expected = next(
         (
@@ -107,11 +110,17 @@ def install_chezmoi() -> Path:
     destination = chezmoi.local_bin() / (
         "chezmoi.exe" if sys.platform == "win32" else "chezmoi"
     )
-    destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_name(f".{destination.name}.download")
-    partial.write_bytes(binary)
-    partial.chmod(0o755)
-    partial.replace(destination)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial.write_bytes(binary)
+        partial.chmod(0o755)
+        partial.replace(destination)
+    except OSError as error:
+        raise SetupError(
+            f"rig init could not install chezmoi to {destination}: {error}. "
+            f"Make {destination.parent} writable, or {INSTALL_HELP}."
+        ) from error
     return destination
 
 

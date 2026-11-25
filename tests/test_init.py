@@ -186,6 +186,37 @@ def test_init_refuses_a_chezmoi_release_without_a_published_checksum(
     assert "Traceback" not in result.stderr
 
 
+def test_init_refuses_an_undecodable_checksums_file(
+    tmp_path: Path, bare_device: dict[str, str]
+):
+    releases = release(tmp_path / "releases", b"chezmoi")
+    checksums = next((tmp_path / "releases").glob("*/*_checksums.txt"))
+    checksums.write_bytes(b"\xff\xfe not a checksums file")
+
+    result = rig("init", env=dict(bare_device, RIG_CHEZMOI_RELEASES_URL=releases))
+
+    assert result.returncode == 1
+    assert f"publishes no checksum for {ASSET}" in result.stderr
+    assert not (Path(bare_device["HOME"]) / INSTALLED).exists()
+    assert "Traceback" not in result.stderr
+
+
+def test_init_explains_an_unwritable_install_location(
+    tmp_path: Path, bare_device: dict[str, str]
+):
+    releases = release(tmp_path / "releases", b"chezmoi")
+    # A file where the install directory should be makes it impossible to create.
+    (Path(bare_device["HOME"]) / ".local").mkdir()
+    (Path(bare_device["HOME"]) / ".local" / "bin").write_text("in the way")
+
+    result = rig("init", env=dict(bare_device, RIG_CHEZMOI_RELEASES_URL=releases))
+
+    assert result.returncode == 1
+    assert "could not install chezmoi" in result.stderr
+    assert "https://www.chezmoi.io/install/" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_init_stops_when_chezmoi_config_is_unreadable(tmp_path: Path):
     tools, home = tmp_path / "bin", tmp_path / "home"
     tools.mkdir()
