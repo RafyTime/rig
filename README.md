@@ -13,17 +13,17 @@ Install Git, uv, and Bun, then authenticate with GitHub. Install the `rig`
 CLI from a release tag and set up the checkout:
 
 ```sh
-uv tool install git+https://github.com/RafyTime/rig@v0.1.0
+uv tool install git+https://github.com/RafyTime/rig@v0.2.0
 rig init                 # Or: rig init OWNER/NAME for your own fork
 ```
 
 `rig init` reuses chezmoi from PATH. Without it, Rig downloads the official
 chezmoi release for x86-64 Fedora or Windows, checks it against the release's
 published SHA-256 checksum, and installs it to `~/.local/bin`, where later `rig`
-commands find it even if that directory is not on PATH. Init only clones the
-checkout; nothing changes in your home until `rig apply`. Running it again for
-the same repository is safe, and it stops if chezmoi already manages a
-different one.
+commands find it even if that directory is not on PATH. Init clones the
+checkout but applies nothing; your dotfiles and skills change only on
+`rig apply`. Running it again for the same repository is safe, and it stops if
+chezmoi already manages a different one.
 
 If this device already has selected skills installed, follow
 [Adopt existing skills](#adopt-existing-skills) before the first apply.
