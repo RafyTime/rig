@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from rig import bootstrap, chezmoi, skills
+from rig import bootstrap, chezmoi, release, skills
 from rig.report import errors, fail
 
 app = typer.Typer(
@@ -15,6 +15,8 @@ app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(skills.app, name="skills")
+self_app = typer.Typer(help="Manage the installed rig CLI.", no_args_is_help=True)
+app.add_typer(self_app, name="self")
 
 
 def show_version(value: bool) -> None:
@@ -113,3 +115,23 @@ def init(
     if code == 0:
         typer.echo("Rig is set up. Run `rig diff` to preview, then `rig apply`.")
     raise typer.Exit(code)
+
+
+@self_app.command("update")
+def self_update() -> None:
+    """Upgrade rig to the latest stable release; the checkout and skills stay as-is."""
+    current = release.installed()
+    try:
+        with errors.status("Checking for the latest rig release..."):
+            latest = release.latest_stable()
+        if latest.version <= current:
+            typer.echo(
+                f"rig {current} is up to date "
+                f"(latest stable release: {latest.version})."
+            )
+            raise typer.Exit()
+        errors.print(f"Upgrading rig {current} to {latest.version}...")
+        release.upgrade(latest)
+    except release.ReleaseError as error:
+        fail(error)
+    typer.echo(f"Upgraded rig {current} to {latest.version}.")
