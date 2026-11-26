@@ -307,7 +307,8 @@ integrations, a `uv tool install` from a temporary tagged Git repository, and a
 real `rig self update` from one tagged build to the next. That test serves the
 release response from a file through `RIG_RELEASES_URL` and installs tags from
 the temporary repository through `RIG_RELEASE_SOURCE`; both are test hooks,
-not user settings.
+not user settings. CI runs it on Ubuntu, native Windows, and a Fedora
+container.
 Locally, the integrations are skipped unless chezmoi, Git, and uv are
 installed. In CI, they always run. On Windows, the integration test uses the same
 PowerShell policy as `chezmoi apply`, and the ownership tests need permission
