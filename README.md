@@ -84,6 +84,14 @@ Windows, rig moves its running launcher files aside so uv can replace them.
 If the release check or uv fails, rig prints the error with the next step,
 usually the `uv tool install` command to run yourself, and exits with status 1.
 
+When you run `rig` yourself in a terminal, it checks for a newer stable release
+at most once a day, with a 2-second timeout, and names it on stderr with a
+suggestion to run `rig self update`. The last check time is the modification
+time of `~/.local/state/rig/release-check`. Runs from scripts, pipes, or CI
+(stdin or stderr not a terminal) never check, and a failed check prints
+nothing. Set `TTY_INTERACTIVE=0` to turn the check off, or `1` to force it.
+Help, `--version`, and `rig self update` skip the notice.
+
 ## Repository layout
 
 | Path | Role |

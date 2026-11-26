@@ -43,6 +43,7 @@ def root(
 def delegate(
     command: str, args: list[str], needs: tuple[chezmoi.Tool, ...] = ()
 ) -> None:
+    release.notify()
     try:
         code = chezmoi.run(command, *args, needs=needs)
     except chezmoi.DependencyError as error:
@@ -94,6 +95,7 @@ def init(
     ] = bootstrap.DEFAULT_REPO,
 ) -> None:
     """Set up this device's Rig checkout without applying it."""
+    release.notify()
     try:
         try:
             chezmoi.find("init", "chezmoi")

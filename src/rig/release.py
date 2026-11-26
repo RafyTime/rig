@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -18,6 +19,8 @@ from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
 from typing import NamedTuple
+
+from rig.report import errors
 
 # Test hooks that point rig at a fixture release service and Git repository; not
 # documented user settings. RIG_RELEASES_URL serves a GitHub-shaped latest-release
@@ -27,6 +30,9 @@ RELEASES_URL = os.environ.get(
 )
 SOURCE = os.environ.get("RIG_RELEASE_SOURCE", "https://github.com/RafyTime/rig")
 UV_INSTALL = "https://docs.astral.sh/uv/getting-started/installation/"
+# Short, so an unreachable release service barely delays the requested command.
+NOTICE_TIMEOUT = 2
+CHECK_INTERVAL = 24 * 60 * 60  # Seconds between release notice checks.
 
 
 class Version(NamedTuple):
@@ -91,6 +97,62 @@ def latest_stable(timeout: float = 10) -> Release:
             f"Try again later, or install a tag from {SOURCE}/releases with "
             f"`uv tool install git+{SOURCE}@<tag>`."
         ) from error
+
+
+def notify() -> None:
+    """Name a newer stable release on stderr, at most once a day, for a person.
+
+    Never stops or fails the command it runs before: an unreachable or unreadable
+    release service only delays it by the short timeout, without a message.
+    """
+    if not interactive() or not due():
+        return
+    try:
+        latest = latest_stable(timeout=NOTICE_TIMEOUT)
+    except ReleaseError:
+        return
+    current = installed()
+    if latest.version > current:
+        errors.print(
+            f"rig {latest.version} is available (installed: {current}). "
+            "Run `rig self update` to upgrade."
+        )
+
+
+def due() -> bool:
+    """Whether a day has passed since the last check, and record this one if so.
+
+    The marker's modification time is the last check, counted whether or not the
+    service answered, so an offline device waits out the timeout once a day at most.
+    A marker rig cannot write skips the check rather than repeating it every run.
+    """
+    marker = Path.home() / ".local" / "state" / "rig" / "release-check"
+    try:
+        if time.time() - marker.stat().st_mtime < CHECK_INTERVAL:
+            return False
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        return False
+    return True
+
+
+def interactive() -> bool:
+    """Whether a person is at the terminal, as opposed to a script, pipe or CI.
+
+    That means stdin and stderr, where the notice goes, are both terminals. Rich's
+    TTY_INTERACTIVE variable overrides this either way ("1" or "0"); unlike Rich,
+    FORCE_COLOR does not count, so colored CI logs still skip the check.
+    """
+    override = os.environ.get("TTY_INTERACTIVE")
+    if override in ("0", "1"):
+        return override == "1"
+    return sys.stdin.isatty() and sys.stderr.isatty()
 
 
 def install_command(release: Release, uv: str = "uv") -> list[str]:
