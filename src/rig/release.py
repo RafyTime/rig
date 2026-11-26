@@ -62,8 +62,15 @@ def installed() -> Version:
     # launcher, and importlib.metadata keeps a zip it searched open, which would
     # stop uv from replacing that launcher.
     directories = [path for path in sys.path if os.path.isdir(path)]
-    rig = next(iter(metadata.distributions(name="rig", path=directories)))
-    return parse(rig.version)
+    try:
+        rig = next(iter(metadata.distributions(name="rig", path=directories)))
+        return parse(rig.version)
+    except (StopIteration, ValueError) as error:
+        raise ReleaseError(
+            "rig cannot tell which stable release is installed"
+            f"{f' ({error})' if str(error) else ''}. Install a release tag with "
+            f"`uv tool install --force git+{SOURCE}@<tag>`."
+        ) from error
 
 
 def parse(text: str) -> Version:
@@ -109,9 +116,9 @@ def notify() -> None:
         return
     try:
         latest = latest_stable(timeout=NOTICE_TIMEOUT)
+        current = installed()  # A development build has no stable version to compare.
     except ReleaseError:
         return
-    current = installed()
     if latest.version > current:
         errors.print(
             f"rig {latest.version} is available (installed: {current}). "
@@ -199,6 +206,7 @@ def launchers_released(release: Release) -> Generator[None]:
     if sys.platform != "win32" or launcher.suffix.lower() != ".exe":
         yield  # Not started from a launcher, e.g. `python -m rig`.
         return
+    # Left behind: the moved files keep running until this process exits.
     aside = Path(tempfile.mkdtemp(prefix="rig-self-update-"))
     moved: list[Path] = []
 

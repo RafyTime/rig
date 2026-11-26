@@ -122,8 +122,8 @@ def init(
 @self_app.command("update")
 def self_update() -> None:
     """Upgrade rig to the latest stable release; the checkout and skills stay as-is."""
-    current = release.installed()
     try:
+        current = release.installed()
         with errors.status("Checking for the latest rig release..."):
             latest = release.latest_stable()
         if latest.version <= current:

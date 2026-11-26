@@ -34,7 +34,7 @@ def device(tmp_path: Path, latest: Path):
 
 def publish(latest: Path, tag: str) -> None:
     """Serve `tag` as the latest stable release, shaped like GitHub's API."""
-    latest.write_text(json.dumps({"tag_name": tag, "prerelease": False}))
+    latest.write_text(json.dumps({"tag_name": tag}))
 
 
 def test_newer_release_is_installed_by_uv_without_touching_the_checkout(
@@ -67,6 +67,15 @@ def test_current_cli_reports_up_to_date_without_installing(
     )
 
 
+def development_build(tmp_path: Path, env: dict[str, str]) -> dict[str, str]:
+    """`env` with rig reporting a version that is not a stable release."""
+    # Python finds PYTHONPATH's metadata before the installed rig's.
+    metadata = tmp_path / "dev" / "rig-0.3.0.dev1.dist-info"
+    metadata.mkdir(parents=True)
+    (metadata / "METADATA").write_text("Name: rig\nVersion: 0.3.0.dev1\n")
+    return dict(env, PYTHONPATH=str(metadata.parent))
+
+
 def assert_fails_with(result, *hints: str) -> None:
     assert result.returncode == 1
     assert "Traceback" not in result.stderr
@@ -97,6 +106,21 @@ def test_unreadable_latest_release_stops_with_manual_install_step(
         result,
         "rig could not read the latest release",
         "uv tool install git+https://github.com/RafyTime/rig@<tag>",
+    )
+    assert result.stdout == ""
+
+
+def test_development_build_stops_with_install_step(
+    tmp_path: Path, device: dict[str, str], latest: Path
+):
+    publish(latest, "v99.0.0")
+
+    result = rig("self", "update", env=development_build(tmp_path, device))
+
+    assert_fails_with(
+        result,
+        "rig cannot tell which stable release is installed",
+        "uv tool install --force git+https://github.com/RafyTime/rig@<tag>",
     )
     assert result.stdout == ""
 

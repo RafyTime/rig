@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_cli import fake_tool, rig
-from test_self_update import publish
+from test_self_update import development_build, publish
 
 NOTICE = "Run `rig self update` to upgrade."
 
@@ -104,6 +104,18 @@ def test_unreachable_release_service_leaves_the_command_usable(
 ):
     # Nothing is published, so the release service cannot answer.
     result = rig("diff", env=device)
+
+    assert result.returncode == 7
+    assert result.stdout.strip() == "chezmoi diff"
+    assert result.stderr == ""
+
+
+def test_development_build_runs_the_command_without_a_notice(
+    tmp_path: Path, device: dict[str, str], latest: Path
+):
+    publish(latest, "v99.0.0")
+
+    result = rig("diff", env=development_build(tmp_path, device))
 
     assert result.returncode == 7
     assert result.stdout.strip() == "chezmoi diff"
