@@ -79,7 +79,8 @@ CLI, runs `uv tool install --force git+https://github.com/RafyTime/rig@<tag>`.
 uv's output streams through. If the CLI is already current, it says so and
 installs nothing. It never pulls or applies the checkout and leaves installed
 skills alone; use `rig update` and `rig skills update` for those. On native
-Windows, rig moves its running launcher files aside so uv can replace them.
+Windows, rig moves its running files (launcher, Python, and loaded native extensions)
+aside so uv can replace them.
 
 If the release check or uv fails, rig prints the error with the next step,
 usually the `uv tool install` command to run yourself, and exits with status 1.

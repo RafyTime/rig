@@ -209,7 +209,7 @@ def upgrade(release: Release) -> None:
             f"Install it from {UV_INSTALL} and try again."
         )
     command = install_command(release, uv)
-    with launchers_released(release):
+    with running_files_moved_aside(release):
         try:
             code = subprocess.run(command, check=False).returncode
         except OSError as error:
@@ -217,61 +217,77 @@ def upgrade(release: Release) -> None:
                 f"rig could not start uv at {uv}: {error}. "
                 f"Reinstall it from {UV_INSTALL} and try again."
             ) from error
-    if code != 0:
-        raise ReleaseError(
-            f"uv could not install rig {release.version} (exit status {code}). "
-            f"Fix the problem uv reported, then run `rig self update` again, or "
-            f"run `{' '.join(install_command(release))}` yourself."
-        )
+        if code != 0:
+            raise ReleaseError(
+                f"uv could not install rig {release.version} (exit status {code}). "
+                f"Fix the problem uv reported, then run `rig self update` again, or "
+                f"run `{' '.join(install_command(release))}` yourself."
+            )
 
 
-@contextmanager
-def launchers_released(release: Release) -> Generator[None]:
-    """Let uv replace the executables this rig process runs from on Windows.
-
-    Windows refuses to delete or overwrite a running executable but lets it move.
-    So the tool environment's python.exe moves aside, with a copy left in its place
-    for uv to find the environment by, and the rig.exe launcher moves aside too. The
-    launcher comes back afterwards unless uv installed a new one.
-    """
+def running_files() -> list[Path]:
+    """The tool environment files this rig process has loaded and runs from."""
     launcher = Path(sys.argv[0])
     if not launcher.suffix:
         launcher = launcher.with_suffix(".exe")  # Shells may drop it from argv.
-    if sys.platform != "win32" or launcher.suffix.lower() != ".exe":
-        yield  # Not started from a launcher, e.g. `python -m rig`.
+    if launcher.suffix.lower() != ".exe":
+        return []  # Not started from a launcher, e.g. `python -m rig`.
+    files = [launcher]
+    environment = Path(sys.prefix)
+    if sys.prefix != sys.base_prefix:  # Only a venv's python.exe, never a base.
+        files.append(Path(sys.executable))
+    # Native extensions such as pydantic_core's stay loaded, so stay undeletable.
+    for module in list(sys.modules.values()):
+        path = Path(getattr(module, "__file__", None) or "")
+        if path.suffix.lower() == ".pyd" and path.is_relative_to(environment):
+            files.append(path)
+    return files
+
+
+@contextmanager
+def running_files_moved_aside(release: Release) -> Generator[None]:
+    """Let uv replace the tool environment this rig process runs from on Windows.
+
+    Windows refuses to delete a running executable or a loaded extension but lets
+    them move. So they move aside, with a copy of python.exe left in place for uv
+    to find the environment by. If uv fails, they come back wherever uv left a gap.
+    """
+    files = running_files() if sys.platform == "win32" else []
+    if not files:
+        yield
         return
     manual = f"Run `{' '.join(install_command(release))}` yourself."
-    moved: list[Path] = []
+    moved: list[tuple[Path, Path]] = []
 
-    def restore(replaced: bool) -> None:
-        """Put the moved files back, except those uv `replaced` with new ones."""
-        for original in moved:
-            if not (replaced and original.exists()):
-                (aside / original.name).replace(original)
+    def restore() -> None:
+        for original, aside in moved:
+            if not original.exists() and original.parent.is_dir():
+                aside.replace(original)
 
     try:
-        # Left behind: the moved files keep running until this process exits.
-        aside = Path(tempfile.mkdtemp(prefix="rig-self-update-"))
-        if sys.prefix != sys.base_prefix:  # Only a venv's python.exe, never a base.
-            python = Path(sys.executable)
-            python.replace(aside / python.name)
-            moved.append(python)
-            shutil.copy2(aside / python.name, python)
-        launcher.replace(aside / launcher.name)
-        moved.append(launcher)
+        # Left behind: the moved files stay in use until this process exits.
+        folder = Path(tempfile.mkdtemp(prefix="rig-self-update-"))
+        for index, original in enumerate(files):
+            aside = folder / f"{index}-{original.name}"
+            original.replace(aside)
+            moved.append((original, aside))
+            if original == Path(sys.executable):
+                shutil.copy2(aside, original)
     except OSError as error:
-        # Also overwrites a partial copy of python.exe.
-        restore(replaced=False)
+        for original, _ in moved:
+            original.unlink(missing_ok=True)  # Including a partial python.exe copy.
+        restore()
         raise ReleaseError(
             f"rig could not move its running files aside for uv to replace "
             f"({error}). {manual}"
         ) from error
     try:
         yield
-    finally:
+    except ReleaseError:
         try:
-            restore(replaced=True)
+            restore()
         except OSError as error:
             raise ReleaseError(
-                f"rig could not put back its files after uv ran ({error}). {manual}"
+                f"rig could not put back its files after uv failed ({error}). {manual}"
             ) from error
+        raise
