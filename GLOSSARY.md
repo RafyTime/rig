@@ -30,3 +30,9 @@ The local clone of the configuration repository that chezmoi manages on a device
 
 **Skills engine**:
 The script in the active checkout that syncs and updates installed skills against the skill selection.
+
+**CLI upgrade**:
+Replacing the installed `rig` CLI with a newer stable release through `rig self update`, independent of the active checkout and installed skills.
+
+**Release notice**:
+A message on an interactive run, at most once a day, that names a newer stable release of the CLI.

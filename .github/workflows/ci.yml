@@ -101,3 +101,16 @@ jobs:
           if (Test-Path (Join-Path $fresh '.example')) { throw 'diff wrote a file' }
           Invoke-Rig apply
           if ((Get-Content (Join-Path $fresh '.example')) -notmatch 'configured') { throw 'apply did not write the file' }
+
+  fedora-self-update:
+    name: Self update (Fedora)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      # Before checkout so it clones with git; the upgrade test also builds tags.
+      - run: dnf install -y --setopt=install_weak_deps=False git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - run: uv sync --locked
+      # A real uv tool install of one tag upgrading itself to the next tag.
+      - run: uv run pytest tests/test_self_update.py

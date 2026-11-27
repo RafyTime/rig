@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from rig import bootstrap, chezmoi, skills
+from rig import bootstrap, chezmoi, release, skills
 from rig.report import errors, fail
 
 app = typer.Typer(
@@ -15,6 +15,8 @@ app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(skills.app, name="skills")
+self_app = typer.Typer(help="Manage the installed rig CLI.", no_args_is_help=True)
+app.add_typer(self_app, name="self")
 
 
 def show_version(value: bool) -> None:
@@ -41,6 +43,7 @@ def root(
 def delegate(
     command: str, args: list[str], needs: tuple[chezmoi.Tool, ...] = ()
 ) -> None:
+    release.notify()
     try:
         code = chezmoi.run(command, *args, needs=needs)
     except chezmoi.DependencyError as error:
@@ -92,6 +95,7 @@ def init(
     ] = bootstrap.DEFAULT_REPO,
 ) -> None:
     """Set up this device's Rig checkout without applying it."""
+    release.notify()
     try:
         try:
             chezmoi.find("init", "chezmoi")
@@ -113,3 +117,12 @@ def init(
     if code == 0:
         typer.echo("Rig is set up. Run `rig diff` to preview, then `rig apply`.")
     raise typer.Exit(code)
+
+
+@self_app.command("update")
+def self_update() -> None:
+    """Upgrade rig to the latest stable release; the checkout and skills stay as-is."""
+    try:
+        release.update_cli()
+    except release.ReleaseError as error:
+        fail(error)

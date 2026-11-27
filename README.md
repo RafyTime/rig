@@ -5,7 +5,8 @@ my machines with [chezmoi](https://www.chezmoi.io/). The current setup
 supports Fedora and native Windows.
 
 [Set up another device](#another-device) · [Daily workflow](#daily-workflow) ·
-[Repository layout](#repository-layout) · [Manage skills](#skills)
+[Upgrade the CLI](#upgrade-the-cli) · [Repository layout](#repository-layout) ·
+[Manage skills](#skills)
 
 ## Another device
 
@@ -13,7 +14,7 @@ Install Git, uv, and Bun, then authenticate with GitHub. Install the `rig`
 CLI from a release tag and set up the checkout:
 
 ```sh
-uv tool install git+https://github.com/RafyTime/rig@v0.2.0
+uv tool install git+https://github.com/RafyTime/rig@v0.3.0
 rig init                 # Or: rig init OWNER/NAME for your own fork
 ```
 
@@ -62,6 +63,35 @@ without refreshing downloaded versions. To preview first, run
 `chezmoi update` and `chezmoi update --apply=false` do the same without the CLI.
 Automatic commits, pushes, and background sync are disabled. Agents must not
 commit or push unless explicitly requested.
+
+## Upgrade the CLI
+
+The `rig` CLI has its own release lifecycle, separate from your configuration:
+
+```sh
+rig self update    # Install the latest stable release if it is newer
+rig --version      # Confirm the installed release
+```
+
+`rig self update` asks GitHub for the latest stable release of `RafyTime/rig`
+(drafts and pre-releases are skipped) and, if it is newer than the installed
+CLI, runs `uv tool install --force git+https://github.com/RafyTime/rig@<tag>`.
+uv's output streams through. If the CLI is already current, it says so and
+installs nothing. It never pulls or applies the checkout and leaves installed
+skills alone; use `rig update` and `rig skills update` for those. On native
+Windows, rig moves its running files (launcher, Python, and loaded native extensions)
+aside so uv can replace them.
+
+If the release check or uv fails, rig prints the error with the next step,
+usually the `uv tool install` command to run yourself, and exits with status 1.
+
+When you run `rig` yourself in a terminal, it checks for a newer stable release
+at most once a day, with a 2-second timeout, and names it on stderr with a
+suggestion to run `rig self update`. The last check time is the modification
+time of `~/.local/state/rig/release-check`. Runs from scripts, pipes, or CI
+(stdin or stderr not a terminal) never check, and a failed check prints
+nothing. Set `TTY_INTERACTIVE=0` to turn the check off.
+Help, `--version`, and `rig self update` skip the notice.
 
 ## Repository layout
 
@@ -282,7 +312,12 @@ git diff --check
 
 pytest runs the existing unittest tests and any new pytest tests. Tests use
 temporary homes and mocked downloads, plus actual chezmoi and `rig`
-integrations and a `uv tool install` from a temporary tagged Git repository.
+integrations, a `uv tool install` from a temporary tagged Git repository, and a
+real `rig self update` from one tagged build to the next. That test serves the
+release response from a file through `RIG_RELEASES_URL` and installs tags from
+the temporary repository through `RIG_RELEASE_SOURCE`; both are test hooks,
+not user settings. CI runs it on Ubuntu, native Windows, and a Fedora
+container.
 Locally, the integrations are skipped unless chezmoi, Git, and uv are
 installed. In CI, they always run. On Windows, the integration test uses the same
 PowerShell policy as `chezmoi apply`, and the ownership tests need permission

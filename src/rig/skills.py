@@ -7,7 +7,7 @@ from typing import Annotated
 
 import typer
 
-from rig import chezmoi
+from rig import chezmoi, release
 from rig.report import fail
 
 app = typer.Typer(
@@ -59,6 +59,7 @@ def run_engine(command: str, *flags: str) -> int:
 
 
 def delegate_to_engine(command: str, flags: list[str]) -> None:
+    release.notify()
     try:
         code = run_engine(command, *flags)
     except chezmoi.DependencyError as error:
