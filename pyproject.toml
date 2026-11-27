@@ -4,8 +4,8 @@ version = "0.2.0"
 description = "Leo's shared personal configuration and agent setup."
 requires-python = ">=3.12"
 dependencies = [
-    "rich>=15.0.0",
-    "typer>=0.29.2",
+    "rich>=15.0.0,<16",
+    "typer>=0.29.2,<0.30",
 ]
 
 [project.scripts]
