@@ -211,10 +211,7 @@ def test_installed_tagged_build_upgrades_itself_to_a_newer_tag(tmp_path: Path):
     )
     if attempt.returncode != 0:
         left = sorted(str(p.relative_to(tmp_path)) for p in (tmp_path / "tools").rglob("*"))
-        pytest.fail(attempt.stdout + attempt.stderr + "
-LEFT:
-" + "
-".join(left[:200]))
+        pytest.fail(attempt.stdout + attempt.stderr + "\nLEFT:\n" + "\n".join(left[:200]))
     upgraded = attempt
 
     assert f"Upgraded rig {old} to {new}." in upgraded.stdout
