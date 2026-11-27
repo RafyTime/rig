@@ -14,7 +14,7 @@ Install Git, uv, and Bun, then authenticate with GitHub. Install the `rig`
 CLI from a release tag and set up the checkout:
 
 ```sh
-uv tool install git+https://github.com/RafyTime/rig@v0.2.0
+uv tool install git+https://github.com/RafyTime/rig@v0.3.0
 rig init                 # Or: rig init OWNER/NAME for your own fork
 ```
 
