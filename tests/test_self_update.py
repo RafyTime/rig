@@ -206,12 +206,22 @@ def test_installed_tagged_build_upgrades_itself_to_a_newer_tag(tmp_path: Path):
 
     # TEMP CI diagnostics: what uv could not remove.
     attempt = subprocess.run(
-        [installed, "self", "update"], cwd=tmp_path, env=environment,
-        capture_output=True, encoding="utf-8", errors="replace", timeout=300,
+        [installed, "self", "update"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+        check=False,
     )
     if attempt.returncode != 0:
-        left = sorted(str(p.relative_to(tmp_path)) for p in (tmp_path / "tools").rglob("*"))
-        pytest.fail(attempt.stdout + attempt.stderr + "\nLEFT:\n" + "\n".join(left[:200]))
+        left = sorted(
+            str(p.relative_to(tmp_path)) for p in (tmp_path / "tools").rglob("*")
+        )
+        pytest.fail(
+            attempt.stdout + attempt.stderr + "\nLEFT:\n" + "\n".join(left[:200])
+        )
     upgraded = attempt
 
     assert f"Upgraded rig {old} to {new}." in upgraded.stdout
