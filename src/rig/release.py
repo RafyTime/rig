@@ -4,6 +4,7 @@ The CLI is a uv tool installed from a release tag. It has its own lifecycle, so
 upgrading it never touches the active checkout or the installed skills.
 """
 
+import http.client
 import json
 import os
 import re
@@ -95,7 +96,7 @@ def latest_stable(timeout: float = 10) -> Release:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             tag = json.load(response)["tag_name"]
         return Release(tag, parse(tag))
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         raise ReleaseError(
             f"rig could not reach the release service at {RELEASES_URL} ({error}). "
             "Check your connection and try again."

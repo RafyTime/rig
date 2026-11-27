@@ -2,6 +2,7 @@
 
 import os
 import socket
+import threading
 import time
 from importlib.metadata import version
 from pathlib import Path
@@ -111,6 +112,29 @@ def test_development_build_runs_the_command_without_a_notice(
     publish(latest, "v99.0.0")
 
     result = rig("diff", env=development_build(tmp_path, device))
+
+    assert result.returncode == 7
+    assert result.stdout.strip() == "chezmoi diff"
+    assert result.stderr == ""
+
+
+def test_cut_off_release_response_leaves_the_command_usable(device: dict[str, str]):
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        port = server.getsockname()[1]
+
+        def answer_partly() -> None:
+            connection, _ = server.accept()
+            with connection:
+                connection.recv(4096)
+                # Promises 100 bytes, sends one, then closes.
+                connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{")
+
+        responder = threading.Thread(target=answer_partly)
+        responder.start()
+        result = rig(
+            "diff", env=dict(device, RIG_RELEASES_URL=f"http://127.0.0.1:{port}")
+        )
+        responder.join(timeout=10)
 
     assert result.returncode == 7
     assert result.stdout.strip() == "chezmoi diff"

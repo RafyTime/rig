@@ -89,7 +89,7 @@ at most once a day, with a 2-second timeout, and names it on stderr with a
 suggestion to run `rig self update`. The last check time is the modification
 time of `~/.local/state/rig/release-check`. Runs from scripts, pipes, or CI
 (stdin or stderr not a terminal) never check, and a failed check prints
-nothing. Set `TTY_INTERACTIVE=0` to turn the check off, or `1` to force it.
+nothing. Set `TTY_INTERACTIVE=0` to turn the check off.
 Help, `--version`, and `rig self update` skip the notice.
 
 ## Repository layout
