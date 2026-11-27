@@ -13,12 +13,6 @@ from test_cli import REPO, fake_tool, rig
 
 
 @pytest.fixture
-def latest(tmp_path: Path) -> Path:
-    """Where the test serves the release service's latest-release response."""
-    return tmp_path / "latest.json"
-
-
-@pytest.fixture
 def device(tmp_path: Path, latest: Path):
     """Fake uv and chezmoi on PATH, with the latest release served from a file."""
     tools = tmp_path / "bin"

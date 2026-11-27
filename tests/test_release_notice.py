@@ -14,11 +14,6 @@ NOTICE = "Run `rig self update` to upgrade."
 
 
 @pytest.fixture
-def latest(tmp_path: Path) -> Path:
-    return tmp_path / "latest.json"
-
-
-@pytest.fixture
 def device(tmp_path: Path, latest: Path) -> dict[str, str]:
     """An interactive session with fake tools, its own home and a fixture release."""
     tools, home = tmp_path / "bin", tmp_path / "home"

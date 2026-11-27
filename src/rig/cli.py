@@ -123,17 +123,6 @@ def init(
 def self_update() -> None:
     """Upgrade rig to the latest stable release; the checkout and skills stay as-is."""
     try:
-        current = release.installed()
-        with errors.status("Checking for the latest rig release..."):
-            latest = release.latest_stable()
-        if latest.version <= current:
-            typer.echo(
-                f"rig {current} is up to date "
-                f"(latest stable release: {latest.version})."
-            )
-            raise typer.Exit()
-        errors.print(f"Upgrading rig {current} to {latest.version}...")
-        release.upgrade(latest)
+        release.update_cli()
     except release.ReleaseError as error:
         fail(error)
-    typer.echo(f"Upgraded rig {current} to {latest.version}.")

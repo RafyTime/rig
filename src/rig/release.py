@@ -20,6 +20,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import NamedTuple
 
+import typer
+
 from rig.report import errors
 
 # Test hooks that point rig at a fixture release service and Git repository; not
@@ -86,10 +88,10 @@ def latest_stable(timeout: float = 10) -> Release:
     Raises ReleaseError if the service is unreachable or its answer is not a
     stable tag, so callers decide whether that stops them.
     """
-    request = urllib.request.Request(
-        RELEASES_URL, headers={"Accept": "application/vnd.github+json"}
-    )
     try:
+        request = urllib.request.Request(
+            RELEASES_URL, headers={"Accept": "application/vnd.github+json"}
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             tag = json.load(response)["tag_name"]
         return Release(tag, parse(tag))
@@ -112,7 +114,7 @@ def notify() -> None:
     Never stops or fails the command it runs before: an unreachable or unreadable
     release service only delays it by the short timeout, without a message.
     """
-    if not interactive() or not due():
+    if not interactive() or not claim_daily_check():
         return
     try:
         latest = latest_stable(timeout=NOTICE_TIMEOUT)
@@ -126,8 +128,8 @@ def notify() -> None:
         )
 
 
-def due() -> bool:
-    """Whether a day has passed since the last check, and record this one if so.
+def claim_daily_check() -> bool:
+    """Record a check now if a day has passed since the last one; say whether.
 
     The marker's modification time is the last check, counted whether or not the
     service answered, so an offline device waits out the timeout once a day at most.
@@ -162,6 +164,21 @@ def interactive() -> bool:
     return sys.stdin.isatty() and sys.stderr.isatty()
 
 
+def update_cli() -> None:
+    """Install the latest stable release if it is newer than the running CLI."""
+    current = installed()
+    with errors.status("Checking for the latest rig release..."):
+        latest = latest_stable()
+    if latest.version <= current:
+        typer.echo(
+            f"rig {current} is up to date (latest stable release: {latest.version})."
+        )
+        return
+    errors.print(f"Upgrading rig {current} to {latest.version}...")
+    upgrade(latest)
+    typer.echo(f"Upgraded rig {current} to {latest.version}.")
+
+
 def install_command(release: Release, uv: str = "uv") -> list[str]:
     return [uv, "tool", "install", "--force", f"git+{SOURCE}@{release.tag}"]
 
@@ -175,14 +192,14 @@ def upgrade(release: Release) -> None:
             f"Install it from {UV_INSTALL} and try again."
         )
     command = install_command(release, uv)
-    try:
-        with launchers_released(release):
+    with launchers_released(release):
+        try:
             code = subprocess.run(command, check=False).returncode
-    except OSError as error:
-        raise ReleaseError(
-            f"rig could not start uv at {uv}: {error}. "
-            f"Reinstall it from {UV_INSTALL} and try again."
-        ) from error
+        except OSError as error:
+            raise ReleaseError(
+                f"rig could not start uv at {uv}: {error}. "
+                f"Reinstall it from {UV_INSTALL} and try again."
+            ) from error
     if code != 0:
         raise ReleaseError(
             f"uv could not install rig {release.version} (exit status {code}). "
@@ -206,17 +223,18 @@ def launchers_released(release: Release) -> Generator[None]:
     if sys.platform != "win32" or launcher.suffix.lower() != ".exe":
         yield  # Not started from a launcher, e.g. `python -m rig`.
         return
-    # Left behind: the moved files keep running until this process exits.
-    aside = Path(tempfile.mkdtemp(prefix="rig-self-update-"))
+    manual = f"Run `{' '.join(install_command(release))}` yourself."
     moved: list[Path] = []
 
-    def restore() -> None:
-        """Put back whatever uv did not replace."""
+    def restore(replaced: bool) -> None:
+        """Put the moved files back, except those uv `replaced` with new ones."""
         for original in moved:
-            if not original.exists():
+            if not (replaced and original.exists()):
                 (aside / original.name).replace(original)
 
     try:
+        # Left behind: the moved files keep running until this process exits.
+        aside = Path(tempfile.mkdtemp(prefix="rig-self-update-"))
         if sys.prefix != sys.base_prefix:  # Only a venv's python.exe, never a base.
             python = Path(sys.executable)
             python.replace(aside / python.name)
@@ -225,12 +243,18 @@ def launchers_released(release: Release) -> Generator[None]:
         launcher.replace(aside / launcher.name)
         moved.append(launcher)
     except OSError as error:
-        restore()
+        # Also overwrites a partial copy of python.exe.
+        restore(replaced=False)
         raise ReleaseError(
             f"rig could not move its running files aside for uv to replace "
-            f"({error}). Run `{' '.join(install_command(release))}` yourself."
+            f"({error}). {manual}"
         ) from error
     try:
         yield
     finally:
-        restore()
+        try:
+            restore(replaced=True)
+        except OSError as error:
+            raise ReleaseError(
+                f"rig could not put back its files after uv ran ({error}). {manual}"
+            ) from error
