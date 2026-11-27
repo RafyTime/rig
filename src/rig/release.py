@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 from collections.abc import Generator
@@ -117,8 +118,23 @@ def notify() -> None:
     """
     if not interactive() or not claim_daily_check():
         return
+    found: list[Release] = []
+
+    def check() -> None:
+        try:
+            found.append(latest_stable(timeout=NOTICE_TIMEOUT))
+        except ReleaseError:
+            pass
+
+    # The socket timeout bounds each read, not DNS or a trickling response, so the
+    # whole check gets one deadline; a daemon thread still waiting is abandoned.
+    worker = threading.Thread(target=check, daemon=True)
+    worker.start()
+    worker.join(NOTICE_TIMEOUT)
+    if not found:
+        return
+    latest = found[0]
     try:
-        latest = latest_stable(timeout=NOTICE_TIMEOUT)
         current = installed()  # A development build has no stable version to compare.
     except ReleaseError:
         return
