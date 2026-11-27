@@ -204,7 +204,18 @@ def test_installed_tagged_build_upgrades_itself_to_a_newer_tag(tmp_path: Path):
     assert installed
     publish(latest, f"v{new}")
 
-    upgraded = run(installed, "self", "update", cwd=tmp_path)
+    # TEMP CI diagnostics: what uv could not remove.
+    attempt = subprocess.run(
+        [installed, "self", "update"], cwd=tmp_path, env=environment,
+        capture_output=True, encoding="utf-8", errors="replace", timeout=300,
+    )
+    if attempt.returncode != 0:
+        left = sorted(str(p.relative_to(tmp_path)) for p in (tmp_path / "tools").rglob("*"))
+        pytest.fail(attempt.stdout + attempt.stderr + "
+LEFT:
+" + "
+".join(left[:200]))
+    upgraded = attempt
 
     assert f"Upgraded rig {old} to {new}." in upgraded.stdout
     assert run(installed, "--version", cwd=tmp_path).stdout.strip() == f"rig {new}"
